@@ -1,1 +1,1 @@
-﻿# ljw1119.github.io
+﻿Computer Graphics homework
