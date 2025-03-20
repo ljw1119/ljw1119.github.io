@@ -2,8 +2,9 @@
 
 layout (location = 0) in vec3 aPos;
 
-uniform float verticalFlip;
+uniform vec2 uPosition;  // Position of the square
 
 void main() {
-    gl_Position = vec4(aPos[0], aPos[1] * verticalFlip, aPos[2], 1.0);
+    // Add the position offset to move the square
+    gl_Position = vec4(aPos.x + uPosition.x, aPos.y + uPosition.y, aPos.z, 1.0);
 } 

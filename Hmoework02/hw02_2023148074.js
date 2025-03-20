@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------------------
-06_FlipTriangle.js
+Moving Square
 
-1) Change the color of the triangle by keyboard input
-   : 'r' for red, 'g' for green, 'b' for blue
-2) Flip the triangle vertically by keyboard input 'f' 
+- Red square can be moved with arrow keys
+- Square stays within canvas boundaries
+- Canvas size: 600 x 600
 ---------------------------------------------------------------------------*/
 import { resizeAspectRatio, setupText, updateText } from '../util/util.js';
 import { Shader, readShaderFile } from '../util/shader.js';
@@ -12,9 +12,11 @@ const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl2');
 let shader;
 let vao;
-let colorTag = "red";
-let verticalFlip = 1.0; // 1.0 for normal, -1.0 for vertical flip
-let textOverlay3; // for text output third line (see util.js)
+let positionX = 0.0;    // Square's X position
+let positionY = 0.0;    // Square's Y position
+const moveStep = 0.01;  // Movement step size
+const squareSize = 0.2; // Square size (length of one side)
+let textOverlay;        // for text output
 
 function initWebGL() {
     if (!gl) {
@@ -22,8 +24,8 @@ function initWebGL() {
         return false;
     }
 
-    canvas.width = 700;
-    canvas.height = 700;
+    canvas.width = 600;  // Changed to 600x600 as required
+    canvas.height = 600;
 
     resizeAspectRatio(gl, canvas);
 
@@ -42,34 +44,34 @@ async function initShader() {
 
 function setupKeyboardEvents() {
     document.addEventListener('keydown', (event) => {
-        if (event.key == 'f') {
-            //console.log("f key pressed");
-            updateText(textOverlay3, "f key pressed");
-            verticalFlip = -verticalFlip; 
-        }
-        else if (event.key == 'r') {
-            //console.log("r key pressed");
-            updateText(textOverlay3, "r key pressed");
-            colorTag = "red";
-        }
-        else if (event.key == 'g') {
-            //console.log("g key pressed");
-            updateText(textOverlay3, "g key pressed");
-            colorTag = "green";
-        }
-        else if (event.key == 'b') {
-            //console.log("b key pressed");
-            updateText(textOverlay3, "b key pressed");
-            colorTag = "blue";
+        // Calculate the limits for the square to stay within canvas
+        const maxX = 1.0 - squareSize/2;  // Fixed boundary calculation
+        const minX = -1.0 + squareSize/2; // Fixed boundary calculation
+        const maxY = 1.0 - squareSize/2;  // Fixed boundary calculation
+        const minY = -1.0 + squareSize/2; // Fixed boundary calculation
+        
+        if (event.key === 'ArrowRight') {
+            if (positionX < maxX) positionX += moveStep;
+        } else if (event.key === 'ArrowLeft') {
+            if (positionX > minX) positionX -= moveStep;
+        } else if (event.key === 'ArrowUp') {
+            if (positionY < maxY) positionY += moveStep;
+        } else if (event.key === 'ArrowDown') {
+            if (positionY > minY) positionY -= moveStep;
         }
     });
 }
 
 function setupBuffers(shader) {
+    // Define vertices for a square using TRIANGLE_FAN
+    const halfSize = squareSize / 2;
     const vertices = new Float32Array([
-        -0.5, -0.5, 0.0,  // Bottom left
-         0.5, -0.5, 0.0,  // Bottom right
-         0.0,  0.5, 0.0   // Top center
+        0.0, 0.0, 0.0,                // Center point
+        -halfSize, -halfSize, 0.0,    // Bottom-left
+        halfSize, -halfSize, 0.0,     // Bottom-right
+        halfSize, halfSize, 0.0,      // Top-right
+        -halfSize, halfSize, 0.0,     // Top-left
+        -halfSize, -halfSize, 0.0     // Bottom-left again (to complete the loop)
     ]);
 
     const vao = gl.createVertexArray();
@@ -79,65 +81,64 @@ function setupBuffers(shader) {
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
 
+    // Use the shader's helper method to set attributes
     shader.setAttribPointer('aPos', 3, gl.FLOAT, false, 0, 0);
-
+    
     return vao;
 }
 
 function render(vao, shader) {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    let color;
-    if (colorTag == "red") {
-        color = [1.0, 0.0, 0.0, 1.0];
-    }
-    else if (colorTag == "green") {
-        color = [0.0, 1.0, 0.0, 1.0];
-    }
-    else if (colorTag == "blue") {
-        color = [0.0, 0.0, 1.0, 1.0];
-    }
-
-    shader.setVec4("uColor", color);
-    shader.setFloat("verticalFlip", verticalFlip);
+    shader.use();
+    
+    // Use the shader's helper methods to set uniforms
+    shader.setVec2("uPosition", [positionX, positionY]);
+    shader.setVec4("uColor", [1.0, 0.0, 0.0, 1.0]);  // Red color
 
     gl.bindVertexArray(vao);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.drawArrays(gl.TRIANGLE_FAN, 0, 6);  // Drawing using TRIANGLE_FAN with 6 vertices
 
     requestAnimationFrame(() => render(vao, shader));
 }
 
 async function main() {
     try {
-
-        // WebGL 초기화
+        console.log("Starting main function");
+        
+        // WebGL initialization
         if (!initWebGL()) {
-            throw new Error('WebGL 초기화 실패');
+            throw new Error('WebGL initialization failed');
         }
+        console.log("WebGL initialized");
 
-        // 셰이더 초기화
+        // Initialize shader
         shader = await initShader();
+        console.log("Shader initialized");
 
-        // setup text overlay (see util.js)
-        setupText(canvas, "r, g, b: change color", 1);
-        setupText(canvas, "f: flip vertically", 2);
-        textOverlay3 = setupText(canvas, "no key pressed", 3);
-
-        // 키보드 이벤트 설정
+        // Setup text overlay
+        textOverlay = setupText(canvas, "Use arrow keys to move the rectangle", 1);
+        console.log("Text overlay setup complete");
+        
+        // Setup keyboard events
         setupKeyboardEvents();
+        console.log("Keyboard events setup complete");
         
-        // 나머지 초기화
+        // Complete initialization
         vao = setupBuffers(shader);
-        shader.use();
+        console.log("Buffers setup complete");
         
-        // 렌더링 시작
+        shader.use();
+        console.log("Starting render loop");
+        
+        // Start rendering
         render(vao, shader);
 
         return true;
 
     } catch (error) {
         console.error('Failed to initialize program:', error);
-        alert('프로그램 초기화에 실패했습니다.');
+        alert('Program initialization failed: ' + error.message);
         return false;
     }
 }
@@ -145,9 +146,10 @@ async function main() {
 // call main function
 main().then(success => {
     if (!success) {
-        console.log('프로그램을 종료합니다.');
+        console.log('Program terminated.');
         return;
     }
+    console.log('Program running successfully.');
 }).catch(error => {
-    console.error('프로그램 실행 중 오류 발생:', error);
+    console.error('Error during program execution:', error);
 });
