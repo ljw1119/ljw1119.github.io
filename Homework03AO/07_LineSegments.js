@@ -13,9 +13,9 @@ import { resizeAspectRatio, setupText, updateText, Axes } from '../util/util.js'
 import { Shader, readShaderFile } from '../util/shader.js';
 
 // Global variables
+let isInitialized = false; // global variable로 event listener가 등록되었는지 확인
 const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl2');
-let isInitialized = false;  // main이 실행되는 순간 true로 change
 let shader;
 let vao;
 let positionBuffer; // 2D position을 위한 VBO (Vertex Buffer Object)
@@ -59,15 +59,18 @@ function initWebGL() {
         return false;
     }
 
-    canvas.width = 700;
-    canvas.height = 700;
-
-    resizeAspectRatio(gl, canvas);
-
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0.1, 0.2, 0.3, 1.0);
 
     return true;
+}
+
+function setupCanvas() {
+    canvas.width = 700;
+    canvas.height = 700;
+    resizeAspectRatio(gl, canvas);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0.1, 0.2, 0.3, 1.0);
 }
 
 function setupBuffers() {
@@ -156,12 +159,12 @@ function calculateIntersections(circleCenterX, circleCenterY, radius, lineStartX
 
 function setupMouseEvents() {
     function handleMouseDown(event) {
-        event.preventDefault(); // 이미 존재할 수 있는 기본 동작을 방지
-        event.stopPropagation(); // event가 상위 요소 (div, body, html 등)으로 전파되지 않도록 방지
+        event.preventDefault(); // 존재할 수 있는 기본 동작을 방지
+        event.stopPropagation(); // event가 상위 요소로 전파되지 않도록 방지
 
-        const rect = canvas.getBoundingClientRect(); // canvas를 나타내는 rect 객체를 반환
-        const x = event.clientX - rect.left;  // canvas 내 x 좌표
-        const y = event.clientY - rect.top;   // canvas 내 y 좌표
+        const rect = canvas.getBoundingClientRect(); 
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
         
         let [glX, glY] = convertToWebGLCoordinates(x, y);
         
@@ -184,9 +187,7 @@ function setupMouseEvents() {
         let [glX, glY] = convertToWebGLCoordinates(x, y);
         
         if (drawingCircle && circleCenter) {
-            // 원의 반지름 계산
             circleRadius = distance(circleCenter[0], circleCenter[1], glX, glY);
-            // 원의 정점 생성
             circleVertices = generateCircleVertices(circleCenter[0], circleCenter[1], circleRadius);
             render();
         } else if (drawingLine) {
@@ -201,15 +202,14 @@ function setupMouseEvents() {
             // 원 그리기 완료
             drawingCircle = false;
             circleDrawn = true;
-            updateText(textOverlay, `Circle: center (${circleCenter[0].toFixed(2)}, ${circleCenter[1].toFixed(2)}), radius = ${circleRadius.toFixed(2)}`);
-            updateText(textOverlay2, "");
+            updateText(textOverlay, "Circle: center (" + circleCenter[0].toFixed(2) +", "+ circleCenter[1].toFixed(2)+") "+"radius = "+ circleRadius.toFixed(2));
             render();
         } else if (drawingLine && tempEndPoint) {
             // 선분 그리기 완료
             lines.push([...startPoint, ...tempEndPoint]);
             drawingLine = false;
             
-            updateText(textOverlay2, `Line segment: (${startPoint[0].toFixed(2)}, ${startPoint[1].toFixed(2)}) ~ (${tempEndPoint[0].toFixed(2)}, ${tempEndPoint[1].toFixed(2)})`);
+            updateText(textOverlay2, "Line segment: ("+startPoint[0].toFixed(2) +", "+ startPoint[1].toFixed(2)+") ~ ("+ tempEndPoint[0].toFixed(2) +", "+ tempEndPoint[1].toFixed(2) +")");
             
             // 교점 계산
             const intersections = calculateIntersections(
@@ -218,12 +218,9 @@ function setupMouseEvents() {
             );
             
             if (intersections.length > 0) {
-                let intersectionText = `Intersection Points: ${intersections.length} `;
+                let intersectionText = "Intersection Points: " + intersections.length +" ";
                 for (let i = 0; i < intersections.length; i++) {
-                    intersectionText += `Point ${i+1}: (${intersections[i][0].toFixed(2)}, ${intersections[i][1].toFixed(2)})`;
-                    if (i < intersections.length - 1) {
-                        intersectionText += ", ";
-                    }
+                    intersectionText += "Point "+ (i+1) +": ("+intersections[i][0].toFixed(2) +", "+ intersections[i][1].toFixed(2) +") ";
                 }
                 updateText(textOverlay3, intersectionText);
             } else {
@@ -311,6 +308,7 @@ async function main() {
         await initShader();
         
         // 나머지 초기화
+        setupCanvas();
         setupBuffers();
         shader.use();
 
