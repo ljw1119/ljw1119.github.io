@@ -202,7 +202,7 @@ function setupMouseEvents() {
             drawingCircle = false;
             circleDrawn = true;
             updateText(textOverlay, `Circle: center(${circleCenter[0].toFixed(2)}, ${circleCenter[1].toFixed(2)}), radius=${circleRadius.toFixed(2)}`);
-            updateText(textOverlay2, "Click and drag to draw a line segment");
+            updateText(textOverlay2, "");
             render();
         } else if (drawingLine && tempEndPoint) {
             // 선분 그리기 완료
@@ -315,8 +315,8 @@ async function main() {
         shader.use();
 
         // 텍스트 초기화
-        textOverlay = setupText(canvas, "Click and drag from center to draw a circle", 1);
-        textOverlay2 = setupText(canvas, "No line segment yet", 2);
+        textOverlay = setupText(canvas, "", 1);
+        textOverlay2 = setupText(canvas, "", 2);
         textOverlay3 = setupText(canvas, "", 3);
         
         // 마우스 이벤트 설정
