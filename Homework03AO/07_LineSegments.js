@@ -201,7 +201,7 @@ function setupMouseEvents() {
             // 원 그리기 완료
             drawingCircle = false;
             circleDrawn = true;
-            updateText(textOverlay, `Circle: center(${circleCenter[0].toFixed(2)}, ${circleCenter[1].toFixed(2)}), radius=${circleRadius.toFixed(2)}`);
+            updateText(textOverlay, `Circle: center (${circleCenter[0].toFixed(2)}, ${circleCenter[1].toFixed(2)}), radius = ${circleRadius.toFixed(2)}`);
             updateText(textOverlay2, "");
             render();
         } else if (drawingLine && tempEndPoint) {
@@ -247,7 +247,7 @@ function render() {
 
     // 원 그리기
     if ((drawingCircle || circleDrawn) && circleVertices.length > 0) {
-        shader.setVec4("u_color", [0.0, 1.0, 0.0, 1.0]); // 녹색으로 원 그리기
+        shader.setVec4("u_color", [1.0, 0.0, 1.0, 1.0]); // 보라색으로 원 그리기
         gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(circleVertices), gl.STATIC_DRAW);
         gl.bindVertexArray(vao);
@@ -256,7 +256,7 @@ function render() {
 
     // 선분 그리기
     if (lines.length > 0) {
-        shader.setVec4("u_color", [1.0, 0.0, 0.0, 1.0]); // 빨간색
+        shader.setVec4("u_color", [0.5, 0.5, 1.0, 1.0]); // 파란색
         gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(lines[0]), gl.STATIC_DRAW);
         gl.bindVertexArray(vao);
