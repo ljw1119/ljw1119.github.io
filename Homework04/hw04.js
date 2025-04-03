@@ -23,13 +23,17 @@ const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl2');
 let shader;
 let axesVAO;
-let cubeVAO;
-let finalTransform;
-let rotationAngle = 0;
-let currentTransformType = null;
-let isAnimating = false;
+let squareVAO;
+let sunAngle = 0;
+let earthOrbitAngle = 0;
+let earthRotationAngle = 0;
+let moonOrbitAngle = 0;
+let moonRotationAngle = 0;
 let lastTime = 0;
-let textOverlay; 
+let textOverlay;
+let sunColorBuffer;
+let earthColorBuffer;
+let moonColorBuffer;
 
 document.addEventListener('DOMContentLoaded', () => {
     if (isInitialized) {
@@ -91,12 +95,12 @@ function setupAxesBuffers(shader) {
     gl.bindVertexArray(null);
 }
 
-function setupCubeBuffers(shader) {
-    const cubeVertices = new Float32Array([
-        -0.25,  0.25,  // 좌상단
-        -0.25, -0.25,  // 좌하단
-         0.25, -0.25,  // 우하단
-         0.25,  0.25   // 우상단
+function setupSquareBuffers(shader) {
+    const squareVertices = new Float32Array([
+        -0.5,  0.5,  // 좌상단
+        -0.5, -0.5,  // 좌하단
+         0.5, -0.5,  // 우하단
+         0.5,  0.5   // 우상단
     ]);
 
     const indices = new Uint16Array([
@@ -104,107 +108,128 @@ function setupCubeBuffers(shader) {
         0, 2, 3     // 두 번째 삼각형
     ]);
 
-    const cubeColors = new Float32Array([
-        1.0, 0.0, 0.0, 1.0,  // 빨간색
-        1.0, 0.0, 0.0, 1.0,
-        1.0, 0.0, 0.0, 1.0,
-        1.0, 0.0, 0.0, 1.0
-    ]);
-
-    cubeVAO = gl.createVertexArray();
-    gl.bindVertexArray(cubeVAO);
+    squareVAO = gl.createVertexArray();
+    gl.bindVertexArray(squareVAO);
 
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, cubeVertices, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, squareVertices, gl.STATIC_DRAW);
     shader.setAttribPointer("a_position", 2, gl.FLOAT, false, 0, 0);
-
-    const colorBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, cubeColors, gl.STATIC_DRAW);
-    shader.setAttribPointer("a_color", 4, gl.FLOAT, false, 0, 0);
 
     const indexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
 
     gl.bindVertexArray(null);
-}
-
-function setupKeyboardEvents() {
-    let key;
-    document.addEventListener('keydown', (event) => {
-        key = event.key;
-        switch(key) {
-            case '1': currentTransformType = 'TRS'; isAnimating = true; break;
-            case '2': currentTransformType = 'TSR'; isAnimating = true; break;
-            case '3': currentTransformType = 'RTS'; isAnimating = true; break;
-            case '4': currentTransformType = 'RST'; isAnimating = true; break;
-            case '5': currentTransformType = 'STR'; isAnimating = true; break;
-            case '6': currentTransformType = 'SRT'; isAnimating = true; break;1234
-            case '7':
-                currentTransformType = null;
-                isAnimating = false;
-                rotationAngle = 0;
-                finalTransform = mat4.create();
-                break;2
-        }
-        if (currentTransformType) {
-            updateText(textOverlay, event.key + ': ' + currentTransformType);
-        } else {
-            updateText(textOverlay, 'NO TRANSFORMA1TION');
-        }
-    });
-}
-
-function getTransformMatrices() {
-    const T = mat4.create();
-    const R = mat4.create();
-    const S = mat4.create();
     
-    mat4.translate(T, T, [0.5, 0.5, 0]);
-    mat4.rotate(R, R, rotationAngle, [0, 0, 1]);
-    mat4.scale(S, S, [0.3, 0.3, 1]);
-    
-    return { T, R, S };
+    sunColorBuffer = gl.createBuffer();
+    const sunColor = new Float32Array([
+        1.0, 0.0, 0.0, 1.0,
+        1.0, 0.0, 0.0, 1.0,
+        1.0, 0.0, 0.0, 1.0,
+        1.0, 0.0, 0.0, 1.0
+    ]);
+    gl.bindBuffer(gl.ARRAY_BUFFER, sunColorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, sunColor, gl.STATIC_DRAW);
+
+    earthColorBuffer = gl.createBuffer();
+    const earthColor = new Float32Array([
+        0.0, 1.0, 1.0, 1.0,
+        0.0, 1.0, 1.0, 1.0,
+        0.0, 1.0, 1.0, 1.0,
+        0.0, 1.0, 1.0, 1.0
+    ]);
+    gl.bindBuffer(gl.ARRAY_BUFFER, earthColorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, earthColor, gl.STATIC_DRAW);
+
+    moonColorBuffer = gl.createBuffer();
+    const moonColor = new Float32Array([
+        1.0, 1.0, 0.0, 1.0,
+        1.0, 1.0, 0.0, 1.0,
+        1.0, 1.0, 0.0, 1.0,
+        1.0, 1.0, 0.0, 1.0
+    ]);
+    gl.bindBuffer(gl.ARRAY_BUFFER, moonColorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, moonColor, gl.STATIC_DRAW);
 }
 
-function applyTransform(type) {
-    finalTransform = mat4.create();
-    const { T, R, S } = getTransformMatrices();
-    
-    const transformOrder = {
-        'TRS': [T, R, S],
-        'TSR': [T, S, R],
-        'RTS': [R, T, S],
-        'RST': [R, S, T],
-        'STR': [S, T, R],
-        'SRT': [S, R, T]
-    };
-
-    /*
-      array.forEach(...) : array 각 element에 대해 반복
-    */
-    if (transformOrder[type]) {
-        transformOrder[type].forEach(matrix => {
-            mat4.multiply(finalTransform, matrix, finalTransform);
-        });
-    }
-}
-
-function render() {
+function render(deltaTime) {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     shader.use();
 
     // 축 그리기
-    shader.setMat4("u_transform", mat4.create());
+    const axesModelMatrix = mat4.create();
+    shader.setMat4("u_model", axesModelMatrix);
     gl.bindVertexArray(axesVAO);
     gl.drawArrays(gl.LINES, 0, 4);
 
-    // 정사각형 그리기
-    shader.setMat4("u_transform", finalTransform);
-    gl.bindVertexArray(cubeVAO);
+    drawSun(deltaTime);
+    
+    drawEarth(deltaTime);
+    
+    drawMoon(deltaTime);
+}
+
+function drawSun(deltaTime) {
+    const sunModelMatrix = mat4.create();
+    
+    sunAngle += (Math.PI / 4) * deltaTime;
+    
+    mat4.rotate(sunModelMatrix, sunModelMatrix, sunAngle, [0, 0, 1]);
+    mat4.scale(sunModelMatrix, sunModelMatrix, [0.2, 0.2, 1.0]);
+    
+    shader.use();
+    shader.setMat4("u_model", sunModelMatrix);
+    
+    gl.bindVertexArray(squareVAO);
+    gl.bindBuffer(gl.ARRAY_BUFFER, sunColorBuffer);
+    shader.setAttribPointer("a_color", 4, gl.FLOAT, false, 0, 0);
+    
+    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+}
+
+function drawEarth(deltaTime) {
+    const earthModelMatrix = mat4.create();
+    
+    earthOrbitAngle += (Math.PI / 6) * deltaTime;
+    earthRotationAngle += Math.PI * deltaTime;
+    
+    mat4.rotate(earthModelMatrix, earthModelMatrix, earthOrbitAngle, [0, 0, 1]);
+    mat4.translate(earthModelMatrix, earthModelMatrix, [0.7, 0, 0]);
+    mat4.rotate(earthModelMatrix, earthModelMatrix, earthRotationAngle, [0, 0, 1]);
+    mat4.scale(earthModelMatrix, earthModelMatrix, [0.1, 0.1, 1.0]);
+    
+    shader.use();
+    shader.setMat4("u_model", earthModelMatrix);
+    
+    gl.bindVertexArray(squareVAO);
+    gl.bindBuffer(gl.ARRAY_BUFFER, earthColorBuffer);
+    shader.setAttribPointer("a_color", 4, gl.FLOAT, false, 0, 0);
+    
+    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+}
+
+function drawMoon(deltaTime) {
+    const moonModelMatrix = mat4.create();
+    
+    moonOrbitAngle += (2 * Math.PI) * deltaTime;
+    moonRotationAngle += Math.PI * deltaTime;
+    
+    mat4.rotate(moonModelMatrix, moonModelMatrix, earthOrbitAngle, [0, 0, 1]);
+    mat4.translate(moonModelMatrix, moonModelMatrix, [0.7, 0, 0]);
+    mat4.rotate(moonModelMatrix, moonModelMatrix, moonOrbitAngle, [0, 0, 1]);
+    mat4.translate(moonModelMatrix, moonModelMatrix, [0.2, 0, 0]);
+    mat4.rotate(moonModelMatrix, moonModelMatrix, moonRotationAngle, [0, 0, 1]);
+    mat4.scale(moonModelMatrix, moonModelMatrix, [0.05, 0.05, 1.0]);
+    
+    shader.use();
+    shader.setMat4("u_model", moonModelMatrix);
+    
+    gl.bindVertexArray(squareVAO);
+    gl.bindBuffer(gl.ARRAY_BUFFER, moonColorBuffer);
+    shader.setAttribPointer("a_color", 4, gl.FLOAT, false, 0, 0);
+    
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
 }
 
@@ -213,11 +238,7 @@ function animate(currentTime) {
     const deltaTime = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
 
-    if (isAnimating && currentTransformType) {
-        rotationAngle += Math.PI * 0.5* deltaTime;
-        applyTransform(currentTransformType);
-    }
-    render();
+    render(deltaTime);
     requestAnimationFrame(animate);
 }
 
@@ -232,15 +253,11 @@ async function main() {
         if (!initWebGL()) {
             throw new Error('WebGL 초기화 실패');
         }
-
-        finalTransform = mat4.create();
         
         shader = await initShader();
         setupAxesBuffers(shader);
-        setupCubeBuffers(shader);
-        textOverlay = setupText(canvas, 'NO TRANSFORMATION', 1);
-        setupText(canvas, 'press 1~7 to apply different order of transformations', 2);
-        setupKeyboardEvents();
+        setupSquareBuffers(shader);
+        textOverlay = setupText(canvas, '', 1);
         shader.use();
         return true;
     } catch (error) {
