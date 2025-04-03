@@ -1,21 +1,5 @@
-/*-------------------------------------------------------------------------
-08_Transformation.js
 
-canvas의 중심에 한 edge의 길이가 0.3인 정사각형을 그리고, 
-이를 크기 변환 (scaling), 회전 (rotation), 이동 (translation) 하는 예제임.
-    T는 x, y 방향 모두 +0.5 만큼 translation
-    R은 원점을 중심으로 2초당 1회전의 속도로 rotate
-    S는 x, y 방향 모두 0.3배로 scale
-이라 할 때, 
-    keyboard 1은 TRS 순서로 적용
-    keyboard 2는 TSR 순서로 적용
-    keyboard 3은 RTS 순서로 적용
-    keyboard 4는 RST 순서로 적용
-    keyboard 5는 STR 순서로 적용
-    keyboard 6은 SRT 순서로 적용
-    keyboard 7은 원래 위치로 돌아옴
----------------------------------------------------------------------------*/
-import { resizeAspectRatio, setupText, updateText, Axes } from '../util/util.js';
+import { resizeAspectRatio, Axes } from '../util/util.js';
 import { Shader, readShaderFile } from '../util/shader.js';
 
 let isInitialized = false;
@@ -30,7 +14,6 @@ let earthRotationAngle = 0;
 let moonOrbitAngle = 0;
 let moonRotationAngle = 0;
 let lastTime = 0;
-let textOverlay;
 let sunColorBuffer;
 let earthColorBuffer;
 let moonColorBuffer;
@@ -73,8 +56,8 @@ function setupAxesBuffers(shader) {
     gl.bindVertexArray(axesVAO);
 
     const axesVertices = new Float32Array([
-        -0.8, 0.0, 0.8, 0.0,  // x축
-        0.0, -0.8, 0.0, 0.8   // y축
+        -0.8, 0.0, 0.0, 0.8, 0.0, 0.0,  // x축
+        0.0, -0.8, 0.0, 0.0, 0.8, 0.0   // y축
     ]);
 
     const axesColors = new Float32Array([
@@ -85,7 +68,7 @@ function setupAxesBuffers(shader) {
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, axesVertices, gl.STATIC_DRAW);
-    shader.setAttribPointer("a_position", 2, gl.FLOAT, false, 0, 0);
+    shader.setAttribPointer("a_position", 3, gl.FLOAT, false, 0, 0);
 
     const colorBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
@@ -97,10 +80,10 @@ function setupAxesBuffers(shader) {
 
 function setupSquareBuffers(shader) {
     const squareVertices = new Float32Array([
-        -0.5,  0.5,  // 좌상단
-        -0.5, -0.5,  // 좌하단
-         0.5, -0.5,  // 우하단
-         0.5,  0.5   // 우상단
+        -0.5,  0.5, 0.0,  // 좌상단
+        -0.5, -0.5, 0.0, // 좌하단
+         0.5, -0.5, 0.0, // 우하단
+         0.5,  0.5, 0.0 // 우상단
     ]);
 
     const indices = new Uint16Array([
@@ -114,7 +97,7 @@ function setupSquareBuffers(shader) {
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, squareVertices, gl.STATIC_DRAW);
-    shader.setAttribPointer("a_position", 2, gl.FLOAT, false, 0, 0);
+    shader.setAttribPointer("a_position", 3, gl.FLOAT, false, 0, 0);
 
     const indexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
@@ -257,7 +240,6 @@ async function main() {
         shader = await initShader();
         setupAxesBuffers(shader);
         setupSquareBuffers(shader);
-        textOverlay = setupText(canvas, '', 1);
         shader.use();
         return true;
     } catch (error) {
