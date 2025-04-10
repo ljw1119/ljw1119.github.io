@@ -9,38 +9,34 @@ export class squarePyramid {
 
         // Initializing data
         this.vertices = new Float32Array([
-            // front face  (v0,v1,v2,v3)
-            0.5,  0.5,  0.5,  -0.5,  0.5,  0.5,  -0.5, -0.5,  0.5,   0.5, -0.5,  0.5,
-            // right face  (v0,v3,v4,v5)
-            0.5,  0.5,  0.5,   0.5, -0.5,  0.5,   0.5, -0.5, -0.5,   0.5,  0.5, -0.5,
-            // top face    (v0,v5,v6,v1)
-            0.5,  0.5,  0.5,   0.5,  0.5, -0.5,  -0.5,  0.5, -0.5,  -0.5,  0.5,  0.5,
-            // left face   (v1,v6,v7,v2)
-            -0.5,  0.5,  0.5,  -0.5,  0.5, -0.5,  -0.5, -0.5, -0.5,  -0.5, -0.5,  0.5,
-            // bottom face (v7,v4,v3,v2)
-            -0.5, -0.5, -0.5,   0.5, -0.5, -0.5,   0.5, -0.5,  0.5,  -0.5, -0.5,  0.5,
-            // back face   (v4,v7,v6,v5)
-            0.5, -0.5, -0.5,  -0.5, -0.5, -0.5,  -0.5,  0.5, -0.5,   0.5,  0.5, -0.5
+            // bottom face
+            -0.5, 0.0, -0.5,   0.5, 0.0, -0.5,   0.5, 0.0, 0.5,   -0.5, 0.0, 0.5,
+            // front face  (v0,v3,v4)
+            -0.5, 0.0, -0.5,   -0.5, 0.0, 0.5,   0.0, 1.0, 0.0,
+            // right face  (v3,v2,v4)
+            -0.5, 0.0, 0.5,   0.5, 0.0, 0.5,   0.0, 1.0, 0.0,
+            // back face   (v2,v1,v4)
+            0.5, 0.0, 0.5,   0.5, 0.0, -0.5,   0.0, 1.0, 0.0,
+            // left face   (v1,v0,v4)
+            0.5, 0.0, -0.5,   -0.5, 0.0, -0.5,   0.0, 1.0, 0.0
         ]);
 
         this.normals = new Float32Array([
-            // front face (v0,v1,v2,v3)
-            0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1,
-            // right face (v0,v3,v4,v5)
-            1, 0, 0,   1, 0, 0,   1, 0, 0,   1, 0, 0,
-            // top face (v0,v5,v6,v1)
-            0, 1, 0,   0, 1, 0,   0, 1, 0,   0, 1, 0,
-            // left face (v1,v6,v7,v2)
-            -1, 0, 0,  -1, 0, 0,  -1, 0, 0,  -1, 0, 0,
-            // bottom face (v7,v4,v3,v2)
             0, -1, 0,   0, -1, 0,   0, -1, 0,   0, -1, 0,
-            // back face (v4,v7,v6,v5)
-            0, 0, -1,   0, 0, -1,   0, 0, -1,   0, 0, -1
+            // front face (v0,v3,v4) 
+            0, 0.4472, -0.8944,   0, 0.4472, -0.8944,   0, 0.4472, -0.8944,
+            // right face (v3,v2,v4) 
+            -0.8944, 0.4472, 0,   -0.8944, 0.4472, 0,   -0.8944, 0.4472, 0,
+            // back face (v2,v1,v4) 
+            0, 0.4472, 0.8944,   0, 0.4472, 0.8944,   0, 0.4472, 0.8944,
+            // left face (v1,v0,v4) 
+            0.8944, 0.4472, 0,   0.8944, 0.4472, 0,   0.8944, 0.4472, 0
         ]);
 
         // if color is provided, set all vertices' color to the given color
         if (options.color) {
-            for (let i = 0; i < 24 * 4; i += 4) {
+            this.colors = new Float32Array(16 * 4);
+            for (let i = 0; i < 16 * 4; i += 4) {
                 this.colors[i] = options.color[0];
                 this.colors[i+1] = options.color[1];
                 this.colors[i+2] = options.color[2];
@@ -49,88 +45,86 @@ export class squarePyramid {
         }
         else {
             this.colors = new Float32Array([
-                // front face (v0,v1,v2,v3) - red
-                1, 0, 0, 1,   1, 0, 0, 1,   1, 0, 0, 1,   1, 0, 0, 1,
-                // right face (v0,v3,v4,v5) - yellow
-                1, 1, 0, 1,   1, 1, 0, 1,   1, 1, 0, 1,   1, 1, 0, 1,
-                // top face (v0,v5,v6,v1) - green
-                0, 1, 0, 1,   0, 1, 0, 1,   0, 1, 0, 1,   0, 1, 0, 1,
-                // left face (v1,v6,v7,v2) - cyan
-                0, 1, 1, 1,   0, 1, 1, 1,   0, 1, 1, 1,   0, 1, 1, 1,
                 // bottom face (v7,v4,v3,v2) - blue
                 0, 0, 1, 1,   0, 0, 1, 1,   0, 0, 1, 1,   0, 0, 1, 1,
-                // back face (v4,v7,v6,v5) - magenta
-                1, 0, 1, 1,   1, 0, 1, 1,   1, 0, 1, 1,   1, 0, 1, 1
+                // front face (v0,v3,v4) - red
+                1, 0, 0, 1,   1, 0, 0, 1,   1, 0, 0, 1,
+                // right face (v3,v2,v4) - yellow
+                1, 1, 0, 1,   1, 1, 0, 1,   1, 1, 0, 1,
+                // back face (v2,v1,v4) - green
+                1, 0, 1, 1,   1, 0, 1, 1,   1, 0, 1, 1,
+                // left face (v1,v0,v4) - cyan
+                0, 1, 1, 1,   0, 1, 1, 1,   0, 1, 1, 1
             ]);
         }
 
         this.texCoords = new Float32Array([
-            // front face (v0,v1,v2,v3)
-            1, 1,   0, 1,   0, 0,   1, 0,
-            // right face (v0,v3,v4,v5)
-            0, 1,   0, 0,   1, 0,   1, 1,
-            // top face (v0,v5,v6,v1)
-            1, 0,   1, 1,   0, 1,   0, 0,
-            // left face (v1,v6,v7,v2)
-            1, 1,   0, 1,   0, 0,   1, 0,
-            // bottom face (v7,v4,v3,v2)
-            1, 1,   0, 1,   0, 0,   1, 0,
-            // back face (v4,v7,v6,v5)
-            0, 0,   1, 0,   1, 1,   0, 1
+            // bottom face (v0,v1,v2,v3)
+            0, 0,   1, 0,   1, 1,   0, 1,
+            // front face (v0,v3,v4)
+            0, 0,   1, 0,   0.5, 1,
+            // right face (v3,v2,v4)
+            0, 0,   1, 0,   0.5, 1,
+            // back face (v2,v1,v4)
+            0, 0,   1, 0,   0.5, 1,
+            // left face (v1,v0,v4)
+            0, 0,   1, 0,   0.5, 1
         ]);
 
         this.indices = new Uint16Array([
-            // front face
-            0, 1, 2,   2, 3, 0,      // v0-v1-v2, v2-v3-v0
-            // right face
-            4, 5, 6,   6, 7, 4,      // v0-v3-v4, v4-v5-v0
-            // top face
-            8, 9, 10,  10, 11, 8,    // v0-v5-v6, v6-v1-v0
-            // left face
-            12, 13, 14,  14, 15, 12, // v1-v6-v7, v7-v2-v1
-            // bottom face
-            16, 17, 18,  18, 19, 16, // v7-v4-v3, v3-v2-v7
-            // back face
-            20, 21, 22,  22, 23, 20  // v4-v7-v6, v6-v5-v4
+            // bottom face (square)
+            0, 1, 2,   2, 3, 0,
+            // front face (triangle)
+            4, 5, 6,
+            // right face (triangle)
+            7, 8, 9,
+            // back face (triangle)
+            10, 11, 12,
+            // left face (triangle)
+            13, 14, 15
         ]);
 
         this.sameVertices = new Uint16Array([
-            0, 4, 8,    // indices of the same vertices as v0
-            1, 11, 12,  // indices of the same vertices as v1
-            2, 15, 19,  // indices of the same vertices as v2
-            3, 5, 18,   // indices of the same vertices as v3
-            6, 17, 20,  // indices of the same vertices as v4
-            7, 9, 23,   // indices of the same vertices as v5
-            10, 13, 22, // indices of the same vertices as v6
-            14, 16, 21  // indices of the same vertices as v7
+            0, 4, 14, 
+            1, 11, 13,
+            2, 8, 10,
+            3, 5, 7, 
+            6, 9, 12, 15  
         ]);
 
-        this.vertexNormals = new Float32Array(72);
-        this.faceNormals = new Float32Array(72);
+        this.vertexNormals = new Float32Array(48);
+        this.faceNormals = new Float32Array(48);
         this.faceNormals.set(this.normals);
 
         // compute vertex normals 
-        for (let i = 0; i < 24; i += 3) {
+        for (let i = 0; i < 16; i += 4) {
+            let vn_x = 0, vn_y = 0, vn_z = 0;
+            let count = 0;
+            
+            for (let j = 0; j < this.sameVertices.length; j++) {
+                if (Math.floor(j/4) === Math.floor(i/4)) {
+                    let idx = this.sameVertices[j];
+                    vn_x += this.normals[idx*3];
+                    vn_y += this.normals[idx*3 + 1];
+                    vn_z += this.normals[idx*3 + 2];
+                    count++;
+                }
+            }
+            
+            if (count > 0) {
+                vn_x /= count;
+                vn_y /= count;
+                vn_z /= count;
+            }
 
-            let vn_x = (this.normals[this.sameVertices[i]*3] + 
-                       this.normals[this.sameVertices[i+1]*3] + 
-                       this.normals[this.sameVertices[i+2]*3]) / 3; 
-            let vn_y = (this.normals[this.sameVertices[i]*3 + 1] + 
-                       this.normals[this.sameVertices[i+1]*3 + 1] + 
-                       this.normals[this.sameVertices[i+2]*3 + 1]) / 3; 
-            let vn_z = (this.normals[this.sameVertices[i]*3 + 2] + 
-                       this.normals[this.sameVertices[i+1]*3 + 2] + 
-                       this.normals[this.sameVertices[i+2]*3 + 2]) / 3; 
-
-            this.vertexNormals[this.sameVertices[i]*3] = vn_x;
-            this.vertexNormals[this.sameVertices[i+1]*3] = vn_x;
-            this.vertexNormals[this.sameVertices[i+2]*3] = vn_x;
-            this.vertexNormals[this.sameVertices[i]*3 + 1] = vn_y;
-            this.vertexNormals[this.sameVertices[i+1]*3 + 1] = vn_y;
-            this.vertexNormals[this.sameVertices[i+2]*3 + 1] = vn_y;
-            this.vertexNormals[this.sameVertices[i]*3 + 2] = vn_z;
-            this.vertexNormals[this.sameVertices[i+1]*3 + 2] = vn_z;
-            this.vertexNormals[this.sameVertices[i+2]*3 + 2] = vn_z;
+            for (let j = 0; j < this.sameVertices.length; j++) {
+                if (Math.floor(j/4) === Math.floor(i/4)) {
+                    let idx = this.sameVertices[j];
+                    this.vertexNormals[idx*3] = vn_x;
+                    this.vertexNormals[idx*3 + 1] = vn_y;
+                    this.vertexNormals[idx*3 + 2] = vn_z;
+                }
+            }
         }
 
         this.initBuffers();
@@ -204,7 +198,7 @@ export class squarePyramid {
         const gl = this.gl;
         shader.use();
         gl.bindVertexArray(this.vao);
-        gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+        gl.drawElements(gl.TRIANGLES, 18, gl.UNSIGNED_SHORT, 0);
         gl.bindVertexArray(null);
     }
 

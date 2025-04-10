@@ -10,7 +10,7 @@
 
 import { resizeAspectRatio, setupText, updateText, Axes } from '../util/util.js';
 import { Shader, readShaderFile } from '../util/shader.js';
-import { Cube } from '../util/cube.js';
+import { squarePyramid } from './squarePyramid.js';
 
 const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl2');
@@ -23,10 +23,11 @@ let isInitialized = false;
 let viewMatrix = mat4.create();
 let projMatrix = mat4.create();
 let modelMatrix = mat4.create(); 
-const cameraCircleRadius = 5.0;
-const cameraCircleHeight = 2.0;
-const cameraCircleSpeed = 90.0; 
-const cube = new Cube(gl);
+const cameraCircleRadius = 3.0; 
+const cameraCircleSpeed = 90.0;  
+const cameraYSpeed = 45.0;      
+
+const pyramid = new squarePyramid(gl);
 const axes = new Axes(gl, 1.8);
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -80,23 +81,23 @@ function render() {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST);
 
-    // Model transformation matrix
-    mat4.rotateX(modelMatrix, modelMatrix, glMatrix.toRadian(deltaTime * 50));
+    mat4.identity(modelMatrix);
 
     // Viewing transformation matrix
     let camX = cameraCircleRadius * Math.sin(glMatrix.toRadian(cameraCircleSpeed * elapsedTime));
     let camZ = cameraCircleRadius * Math.cos(glMatrix.toRadian(cameraCircleSpeed * elapsedTime));
+        let camY = 5 + 5 * Math.sin(glMatrix.toRadian(cameraYSpeed * elapsedTime));
+    
     mat4.lookAt(viewMatrix, 
-        vec3.fromValues(camX, cameraCircleHeight, camZ), // camera position
+        vec3.fromValues(camX, camY, camZ), 
         vec3.fromValues(0, 0, 0), // look at origin
         vec3.fromValues(0, 1, 0)); // up vector
 
-    // drawing the cube
-    shader.use();  // using the cube's shader
+    shader.use();
     shader.setMat4('u_model', modelMatrix);
     shader.setMat4('u_view', viewMatrix);
     shader.setMat4('u_projection', projMatrix);
-    cube.draw(shader);
+    pyramid.draw(shader);
 
     // drawing the axes (using the axes's shader)
     axes.draw(viewMatrix, projMatrix);
