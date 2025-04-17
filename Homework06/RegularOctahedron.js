@@ -1,7 +1,7 @@
-export class squarePyramid {
+export class RegularOctahedron {
     constructor(gl, options = {}) {
         this.gl = gl;
-        
+
         // Creating VAO and buffers
         this.vao = gl.createVertexArray();
         this.vbo = gl.createBuffer();
@@ -9,123 +9,120 @@ export class squarePyramid {
 
         // Initializing data
         this.vertices = new Float32Array([
-            // bottom face
-            -0.5, 0.0, -0.5,   0.5, 0.0, -0.5,   0.5, 0.0, 0.5,   -0.5, 0.0, 0.5,
-            // front face  (v0,v3,v4)
-            -0.5, 0.0, -0.5,   -0.5, 0.0, 0.5,   0.0, 1.0, 0.0,
-            // right face  (v3,v2,v4)
-            -0.5, 0.0, 0.5,   0.5, 0.0, 0.5,   0.0, 1.0, 0.0,
-            // back face   (v2,v1,v4)
-            0.5, 0.0, 0.5,   0.5, 0.0, -0.5,   0.0, 1.0, 0.0,
-            // left face   (v1,v0,v4)
-            0.5, 0.0, -0.5,   -0.5, 0.0, -0.5,   0.0, 1.0, 0.0
+            // Bottom faces (4 triangles)
+            // Triangle 1 (-x, -z)
+            -0.7071, 0.0, -0.7071, 0.0, -1.0, 0.0, 0.7071, 0.0, -0.7071,
+            // Triangle 2 (-x, +z)
+            -0.7071, 0.0, 0.7071, 0.0, -1.0, 0.0, -0.7071, 0.0, -0.7071,
+            // Triangle 3 (+x, +z)
+            0.7071, 0.0, 0.7071, 0.0, -1.0, 0.0, -0.7071, 0.0, 0.7071,
+            // Triangle 4 (+x, -z)
+            0.7071, 0.0, -0.7071, 0.0, -1.0, 0.0, 0.7071, 0.0, 0.7071,
+
+            // Top faces (4 triangles)
+            // Triangle 5 (-x, -z)
+            -0.7071, 0.0, -0.7071, 0.0, 1.0, 0.0, 0.7071, 0.0, -0.7071,
+            // Triangle 6 (-x, +z)
+            -0.7071, 0.0, 0.7071, 0.0, 1.0, 0.0, -0.7071, 0.0, -0.7071,
+            // Triangle 7 (+x, +z)
+            0.7071, 0.0, 0.7071, 0.0, 1.0, 0.0, -0.7071, 0.0, 0.7071,
+            // Triangle 8 (+x, -z)
+            0.7071, 0.0, -0.7071, 0.0, 1.0, 0.0, 0.7071, 0.0, 0.7071,
         ]);
 
         this.normals = new Float32Array([
-            0, -1, 0,   0, -1, 0,   0, -1, 0,   0, -1, 0,
-            // front face (v0,v3,v4) 
-            0, 0.4472, -0.8944,   0, 0.4472, -0.8944,   0, 0.4472, -0.8944,
-            // right face (v3,v2,v4) 
-            -0.8944, 0.4472, 0,   -0.8944, 0.4472, 0,   -0.8944, 0.4472, 0,
-            // back face (v2,v1,v4) 
-            0, 0.4472, 0.8944,   0, 0.4472, 0.8944,   0, 0.4472, 0.8944,
-            // left face (v1,v0,v4) 
-            0.8944, 0.4472, 0,   0.8944, 0.4472, 0,   0.8944, 0.4472, 0
+            // Bottom faces
+            // Triangle 1
+            -0.5774, -0.5774, -0.5774, -0.5774, -0.5774, -0.5774, -0.5774, -0.5774, -0.5774,
+            // Triangle 2
+            -0.5774, -0.5774, 0.5774, -0.5774, -0.5774, 0.5774, -0.5774, -0.5774, 0.5774,
+            // Triangle 3
+            0.5774, -0.5774, 0.5774, 0.5774, -0.5774, 0.5774, 0.5774, -0.5774, 0.5774,
+            // Triangle 4
+            0.5774, -0.5774, -0.5774, 0.5774, -0.5774, -0.5774, 0.5774, -0.5774, -0.5774,
+
+            // Top faces
+            // Triangle 5
+            -0.5774, 0.5774, -0.5774, -0.5774, 0.5774, -0.5774, -0.5774, 0.5774, -0.5774,
+            // Triangle 6
+            -0.5774, 0.5774, 0.5774, -0.5774, 0.5774, 0.5774, -0.5774, 0.5774, 0.5774,
+            // Triangle 7
+            0.5774, 0.5774, 0.5774, 0.5774, 0.5774, 0.5774, 0.5774, 0.5774, 0.5774,
+            // Triangle 8
+            0.5774, 0.5774, -0.5774, 0.5774, 0.5774, -0.5774, 0.5774, 0.5774, -0.5774,
         ]);
 
         // if color is provided, set all vertices' color to the given color
         if (options.color) {
-            this.colors = new Float32Array(16 * 4);
-            for (let i = 0; i < 16 * 4; i += 4) {
+            this.colors = new Float32Array(24 * 4);
+            for (let i = 0; i < 24 * 4; i += 4) {
                 this.colors[i] = options.color[0];
-                this.colors[i+1] = options.color[1];
-                this.colors[i+2] = options.color[2];
-                this.colors[i+3] = options.color[3];
+                this.colors[i + 1] = options.color[1];
+                this.colors[i + 2] = options.color[2];
+                this.colors[i + 3] = options.color[3];
             }
         }
         else {
             this.colors = new Float32Array([
-                // bottom face (v7,v4,v3,v2) - blue
-                0, 0, 1, 1,   0, 0, 1, 1,   0, 0, 1, 1,   0, 0, 1, 1,
-                // front face (v0,v3,v4) - red
-                1, 0, 0, 1,   1, 0, 0, 1,   1, 0, 0, 1,
-                // right face (v3,v2,v4) - yellow
-                1, 1, 0, 1,   1, 1, 0, 1,   1, 1, 0, 1,
-                // back face (v2,v1,v4) - green
-                1, 0, 1, 1,   1, 0, 1, 1,   1, 0, 1, 1,
-                // left face (v1,v0,v4) - cyan
-                0, 1, 1, 1,   0, 1, 1, 1,   0, 1, 1, 1
+                // Bottom faces - different colors for each face
+                // Triangle 1 - red
+                1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1,
+                // Triangle 2 - green
+                0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
+                // Triangle 3 - blue
+                0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1,
+                // Triangle 4 - yellow
+                1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1,
+
+                // Top faces
+                // Triangle 5 - cyan
+                0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1,
+                // Triangle 6 - magenta
+                1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1,
+                // Triangle 7 - white
+                1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                // Triangle 8 - dark gray
+                0.3, 0.3, 0.3, 1, 0.3, 0.3, 0.3, 1, 0.3, 0.3, 0.3, 1,
             ]);
         }
 
         this.texCoords = new Float32Array([
-            // bottom face (v0,v1,v2,v3)
-            0, 0,   1, 0,   1, 1,   0, 1,
+            // Bottom hemisphere - Map texture coordinates to span across all faces
+            // front face (v0,v3,v5)
+            0, 0.5,   0.5, 0,   0.25, 0.5,
+            // right face (v3,v2,v5)
+            0.25, 0.5,   0.5, 0,   0.5, 0.5,
+            // back face (v2,v1,v5)
+            0.5, 0.5,   0.5, 0,   0.75, 0.5,
+            // left face (v1,v0,v5)
+            0.75, 0.5,   0.5, 0,   1, 0.5,
+
             // front face (v0,v3,v4)
-            0, 0,   1, 0,   0.5, 1,
+            0, 0.5,   0.5, 1,   0.25, 0.5,
             // right face (v3,v2,v4)
-            0, 0,   1, 0,   0.5, 1,
+            0.25, 0.5,   0.5, 1,   0.5, 0.5,
             // back face (v2,v1,v4)
-            0, 0,   1, 0,   0.5, 1,
+            0.5, 0.5,   0.5, 1,   0.75, 0.5,
             // left face (v1,v0,v4)
-            0, 0,   1, 0,   0.5, 1
+            0.75, 0.5,   0.5, 1,   1, 0.5
         ]);
 
         this.indices = new Uint16Array([
-            // bottom face (square)
-            0, 1, 2,   2, 3, 0,
-            // front face (triangle)
-            4, 5, 6,
-            // right face (triangle)
-            7, 8, 9,
-            // back face (triangle)
-            10, 11, 12,
-            // left face (triangle)
-            13, 14, 15
+            // Bottom faces
+            0, 1, 2,
+            3, 4, 5,
+            6, 7, 8,
+            9, 10, 11,
+
+            // Top faces
+            12, 14, 13,
+            15, 17, 16,
+            18, 20, 19,
+            21, 23, 22,
         ]);
 
-        this.sameVertices = new Uint16Array([
-            0, 4, 14, 
-            1, 11, 13,
-            2, 8, 10,
-            3, 5, 7, 
-            6, 9, 12, 15  
-        ]);
-
-        this.vertexNormals = new Float32Array(48);
-        this.faceNormals = new Float32Array(48);
-        this.faceNormals.set(this.normals);
-
-        // compute vertex normals 
-        for (let i = 0; i < 16; i += 4) {
-            let vn_x = 0, vn_y = 0, vn_z = 0;
-            let count = 0;
-            
-            for (let j = 0; j < this.sameVertices.length; j++) {
-                if (Math.floor(j/4) === Math.floor(i/4)) {
-                    let idx = this.sameVertices[j];
-                    vn_x += this.normals[idx*3];
-                    vn_y += this.normals[idx*3 + 1];
-                    vn_z += this.normals[idx*3 + 2];
-                    count++;
-                }
-            }
-            
-            if (count > 0) {
-                vn_x /= count;
-                vn_y /= count;
-                vn_z /= count;
-            }
-
-            for (let j = 0; j < this.sameVertices.length; j++) {
-                if (Math.floor(j/4) === Math.floor(i/4)) {
-                    let idx = this.sameVertices[j];
-                    this.vertexNormals[idx*3] = vn_x;
-                    this.vertexNormals[idx*3 + 1] = vn_y;
-                    this.vertexNormals[idx*3 + 2] = vn_z;
-                }
-            }
-        }
+        this.vertexNormals = new Float32Array(this.normals);
+        this.faceNormals = new Float32Array(this.normals);
 
         this.initBuffers();
     }
@@ -185,20 +182,19 @@ export class squarePyramid {
 
         gl.bindVertexArray(this.vao);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-        
+
         // normals 데이터만 업데이트
         gl.bufferSubData(gl.ARRAY_BUFFER, vSize, this.normals);
-        
+
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
         gl.bindVertexArray(null);
     }
 
     draw(shader) {
-
         const gl = this.gl;
         shader.use();
         gl.bindVertexArray(this.vao);
-        gl.drawElements(gl.TRIANGLES, 18, gl.UNSIGNED_SHORT, 0);
+        gl.drawElements(gl.TRIANGLES, 24, gl.UNSIGNED_SHORT, 0);
         gl.bindVertexArray(null);
     }
 

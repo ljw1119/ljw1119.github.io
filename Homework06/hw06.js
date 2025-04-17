@@ -8,7 +8,7 @@
 
 import { resizeAspectRatio, Axes } from '../util/util.js';
 import { Shader, readShaderFile } from '../util/shader.js';
-import { Cube } from '../util/cube.js';
+import { RegularOctahedron } from './RegularOctahedron.js';
 import { Arcball } from '../util/arcball.js';
 import { loadTexture } from '../util/texture.js';
 const canvas = document.getElementById('glCanvas');
@@ -21,8 +21,8 @@ let viewMatrix = mat4.create();
 let projMatrix = mat4.create();
 let modelMatrix = mat4.create();
 const axes = new Axes(gl, 1.5); // create an Axes object with the length of axis 1.5
-const texture = loadTexture(gl, true, '../images/textures/woodWall3.png'); // see ../util/texture.js
-const cube = new Cube(gl);
+const texture = loadTexture(gl, true, '../images/textures/sunrise.jpg'); // Load sunrise.jpg
+const octahedron = new RegularOctahedron(gl);  // Create octahedron instead of cube
 
 // Arcball object: initial distance 5.0, rotation sensitivity 2.0, zoom sensitivity 0.0005
 // default of rotation sensitivity = 1.5, default of zoom sensitivity = 0.001
@@ -76,12 +76,12 @@ function render() {
     // get view matrix from the arcball
     const viewMatrix = arcball.getViewMatrix();
 
-    // drawing the cube
-    shader.use();  // using the cube's shader
+    // drawing the octahedron
+    shader.use();  // using the octahedron's shader
     shader.setMat4('u_model', modelMatrix);
     shader.setMat4('u_view', viewMatrix);
     shader.setMat4('u_projection', projMatrix);
-    cube.draw(shader);
+    octahedron.draw(shader);
 
     // drawing the axes (using the axes's shader: see util.js)
     axes.draw(viewMatrix, projMatrix);
