@@ -11,7 +11,6 @@ export class Cone {
         // VAO, VBO, EBO 생성
         this.vao = gl.createVertexArray();
         this.vbo = gl.createBuffer();
-        this.ebo = gl.createBuffer();
 
         // 파라미터 설정
         const radius = 0.5;     // 원기둥 반지름
@@ -26,7 +25,6 @@ export class Cone {
         const normals   = [];
         const colors    = [];
         const texCoords = [];
-        const indices   = [];
 
         // 옵션에서 color가 있으면 사용, 없으면 기본값 사용
         const defaultColor = [0.8, 0.8, 0.8, 1.0];
@@ -34,12 +32,10 @@ export class Cone {
 
         // 각 세그먼트별로 사각형(face)을 만든다.
         // 사각형 정점 순서(외부에서 본 CCW): top0 -> top1 -> bot1 -> bot0
-        //  - top0: angle0, y= +0.5
-        //  - top1: angle1, y= +0.5
+        //  - top0:         y= +0.5
         //  - bot1: angle1, y= -0.5
         //  - bot0: angle0, y= -0.5
         //
-        // 인덱스는 (0,1,2), (2,3,0)로 두 삼각형을 구성.
         // 이 순서가 외부에서 볼 때 CCW가 되도록 정렬합니다.
         for (let i = 0; i < segments; i++) {
             const angle0 = i * angleStep;
@@ -56,7 +52,7 @@ export class Cone {
             const x1_bot = radius * Math.cos(angle1);
             const z1_bot = radius * Math.sin(angle1);
 
-            // 각 face의 4개 정점 (CCW)
+            // 각 face의 3개 정점 (CCW)
             positions.push(
                 x_top, halfH, z_top,
                 x1_bot, -halfH, z1_bot,
@@ -67,7 +63,7 @@ export class Cone {
             // face의 중앙 각도(midAngle) 기준으로 바깥쪽을 가리키는 (cos, 0, sin)
             const midAngle = angle0 + angleStep * 0.5;
             const nx = Math.cos(midAngle);
-            const ny = 0.0;
+            const ny = Math.cos(Math.atan(2 * halfH / radius)); // y축에 수직인 방향
             const nz = Math.sin(midAngle);
 
             // 이 사각형의 4개 정점에 동일한 법선 지정
@@ -90,18 +86,11 @@ export class Cone {
             const u0 = i / segments;       // angle0 비율
             const u1 = (i + 1) / segments; // angle1 비율
             texCoords.push(
-                0.5, 1,
+                (u0 + u1) / 2, 1,
                 // bot1
                 u1, 0,
                 // bot0
                 u0, 0
-            );
-
-            // 인덱스 (두 삼각형)
-            // 이번 face가 i번째면, 정점 baseIndex = i*4
-            const base = i * 3;
-            indices.push(
-                base, base + 1, base + 2
             );
         }
 
@@ -110,7 +99,6 @@ export class Cone {
         this.normals  = new Float32Array(normals);
         this.colors   = new Float32Array(colors);
         this.texCoords= new Float32Array(texCoords);
-        this.indices  = new Uint16Array(indices);
 
         // backup normals (for flat/smooth shading)
         this.faceNormals = new Float32Array(this.normals);
@@ -181,10 +169,6 @@ export class Cone {
         gl.bufferSubData(gl.ARRAY_BUFFER, vSize + nSize, this.colors);
         gl.bufferSubData(gl.ARRAY_BUFFER, vSize + nSize + cSize, this.texCoords);
 
-        // 인덱스 버퍼 (EBO)
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ebo);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.indices, gl.STATIC_DRAW);
-
         // vertexAttribPointer 설정
         // (shader의 layout: 0->pos, 1->normal, 2->color, 3->texCoord)
         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);  // positions
@@ -225,7 +209,7 @@ export class Cone {
         const gl = this.gl;
         shader.use();
         gl.bindVertexArray(this.vao);
-        gl.drawElements(gl.TRIANGLES, this.indices.length, gl.UNSIGNED_SHORT, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, this.vertices.length / 3);
         gl.bindVertexArray(null);
     }
 
@@ -235,7 +219,6 @@ export class Cone {
     delete() {
         const gl = this.gl;
         gl.deleteBuffer(this.vbo);
-        gl.deleteBuffer(this.ebo);
         gl.deleteVertexArray(this.vao);
     }
 }
