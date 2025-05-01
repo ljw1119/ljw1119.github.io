@@ -46,27 +46,20 @@ export class Cylinder {
             const angle1 = (i + 1) * angleStep;
 
             // 현재 세그먼트의 상단 (y=+0.5)
-            const x0_top = radius * Math.cos(angle0);
-            const z0_top = radius * Math.sin(angle0);
-            const x1_top = radius * Math.cos(angle1);
-            const z1_top = radius * Math.sin(angle1);
+            const x_top = 0;
+            const z_top = 0;
 
             // 현재 세그먼트의 하단 (y=-0.5)
             // (원기둥이므로 x,z는 동일, y만 -0.5)
-            const x0_bot = x0_top;
-            const z0_bot = z0_top;
-            const x1_bot = x1_top;
-            const z1_bot = z1_top;
+            const x0_bot = radius * Math.cos(angle0);
+            const z0_bot = radius * Math.sin(angle0);
+            const x1_bot = radius * Math.cos(angle1);
+            const z1_bot = radius * Math.sin(angle1);
 
             // 각 face의 4개 정점 (CCW)
             positions.push(
-                // top0
-                x0_top,  halfH, z0_top,
-                // top1
-                x1_top,  halfH, z1_top,
-                // bot1
+                x_top, halfH, z_top,
                 x1_bot, -halfH, z1_bot,
-                // bot0
                 x0_bot, -halfH, z0_bot
             );
 
@@ -78,12 +71,12 @@ export class Cylinder {
             const nz = Math.sin(midAngle);
 
             // 이 사각형의 4개 정점에 동일한 법선 지정
-            for (let k = 0; k < 4; k++) {
+            for (let k = 0; k < 3; k++) {
                 normals.push(nx, ny, nz);
             }
 
             // 색상도 마찬가지로 4정점 동일
-            for (let k = 0; k < 4; k++) {
+            for (let k = 0; k < 3; k++) {
                 colors.push(
                     colorOption[0],
                     colorOption[1],
@@ -97,10 +90,7 @@ export class Cylinder {
             const u0 = i / segments;       // angle0 비율
             const u1 = (i + 1) / segments; // angle1 비율
             texCoords.push(
-                // top0
-                u0, 1,
-                // top1
-                u1, 1,
+                0.5, 1,
                 // bot1
                 u1, 0,
                 // bot0
@@ -109,10 +99,9 @@ export class Cylinder {
 
             // 인덱스 (두 삼각형)
             // 이번 face가 i번째면, 정점 baseIndex = i*4
-            const base = i * 4;
+            const base = i * 3;
             indices.push(
-                base, base + 1, base + 2,
-                base + 2, base + 3, base
+                base, base + 1, base + 2
             );
         }
 

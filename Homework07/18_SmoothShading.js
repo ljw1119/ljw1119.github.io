@@ -1,20 +1,21 @@
 /*--------------------------------------------------------------------------------
 18_SmoothShading.js
 
-- Viewing a 3D unit cylinder at origin with perspective projection
-- Rotating the cylinder by ArcBall interface (by left mouse button dragging)
+- Viewing a 3D unit cone at origin with perspective projection
+- Rotating the cone by ArcBall interface (by left mouse button dragging)
 - Keyboard controls:
     - 'a' to switch between camera and model rotation modes in ArcBall interface
     - 'r' to reset arcball
     - 's' to switch to smooth shading
     - 'f' to switch to flat shading
-- Applying Diffuse & Specular reflection using Flat/Smooth shading to the cylinder
+- Applying Diffuse & Specular reflection using Flat/Smooth shading to the cone
 ----------------------------------------------------------------------------------*/
 import { resizeAspectRatio, setupText, updateText} from '../util/util.js';
 import { Shader, readShaderFile } from '../util/shader.js';
 import { Cube } from '../util/cube.js';
 import { Arcball } from '../util/arcball.js';
-import { Cylinder } from '../util/cylinder.js';
+import { cone } from '../util/cone.js';
+import { Cone } from '../Homework07/cone.js';
 
 const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl2');
@@ -31,8 +32,8 @@ let lampModelMatrix = mat4.create();
 let arcBallMode = 'CAMERA';     // 'CAMERA' or 'MODEL'
 let shadingMode = 'SMOOTH';       // 'FLAT' or 'SMOOTH'
 
-const cylinder = new Cylinder(gl, 32);
 const lamp = new Cube(gl);
+const cone = new Cone(gl, 32);
 
 const cameraPos = vec3.fromValues(0, 0, 3);
 const lightPos = vec3.fromValues(1.0, 0.7, 1.0);
@@ -77,15 +78,15 @@ function setupKeyboardEvents() {
             updateText(textOverlay2, "arcball mode: " + arcBallMode);
         }
         else if (event.key == 's') {
-            cylinder.copyVertexNormalsToNormals();
-            cylinder.updateNormals();
+            cone.copyVertexNormalsToNormals();
+            cone.updateNormals();
             shadingMode = 'SMOOTH';
             updateText(textOverlay3, "shading mode: " + shadingMode);
             render();
         }
         else if (event.key == 'f') {
-            cylinder.copyFaceNormalsToNormals();
-            cylinder.updateNormals();
+            cone.copyFaceNormalsToNormals();
+            cone.updateNormals();
             shadingMode = 'FLAT';
             updateText(textOverlay3, "shading mode: " + shadingMode);
             render();
@@ -139,12 +140,12 @@ function render() {
         viewMatrix = arcball.getViewCamDistanceMatrix();
     }
 
-    // drawing the cylinder
-    shader.use();  // using the cylinder's shader
+    // drawing the cone
+    shader.use();  // using the cone's shader
     shader.setMat4('u_model', modelMatrix);
     shader.setMat4('u_view', viewMatrix);
     shader.setVec3('u_viewPos', cameraPos);
-    cylinder.draw(shader);
+    cone.draw(shader);
 
     // drawing the lamp
     lampShader.use();
