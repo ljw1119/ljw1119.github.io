@@ -1,4 +1,4 @@
-export class Cylinder {
+export class Cone {
     /**
      * @param {WebGLRenderingContext} gl         - WebGL 렌더링 컨텍스트
      * @param {number} segments                 - 옆면 세그먼트 수 (원 둘레를 몇 등분할지)
