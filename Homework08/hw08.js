@@ -15,16 +15,14 @@ let viewMatrix = mat4.create();
 let projMatrix = mat4.create();
 let modelMatrix = mat4.create();
 let arcBallMode = 'CAMERA';     // 'CAMERA' or 'MODEL'
-let shadingMode = 'FLAT';       // 'FLAT' or 'SMOOTH'
+let toonLevels = 1;             // 1 ~ 5
 
 const cylinder = new Cylinder(gl, 32);
 const axes = new Axes(gl, 1.5); // create an Axes object with the length of axis 1.5
-const texture = loadTexture(gl, true, '../images/textures/sunrise.jpg');
 
 const cameraPos = vec3.fromValues(0, 0, 3);
-const lightDirection = vec3.fromValues(1.0, 0.5, 0.5);
+const lightDirection = vec3.fromValues(1.0, 0.25, 0.5);
 const shininess = 32.0;
-
 
 // Arcball object: initial distance 5.0, rotation sensitivity 2.0, zoom sensitivity 0.0005
 // default of rotation sensitivity = 1.5, default of zoom sensitivity = 0.001
@@ -64,18 +62,9 @@ function setupKeyboardEvents() {
             arcBallMode = 'CAMERA';
             updateText(textOverlay2, "arcball mode: " + arcBallMode);
         }
-        else if (event.key == 's') {
-            cylinder.copyVertexNormalsToNormals();
-            cylinder.updateNormals();
-            shadingMode = 'SMOOTH';
-            updateText(textOverlay3, "shading mode: " + shadingMode);
-            render();
-        }
-        else if (event.key == 'f') {
-            cylinder.copyFaceNormalsToNormals();
-            cylinder.updateNormals();
-            shadingMode = 'FLAT';
-            updateText(textOverlay3, "shading mode: " + shadingMode);
+        else if (event.key >= '1' && event.key <= '5') {
+            toonLevels = parseInt(event.key);
+            updateText(textOverlay3, "toon levels: " + toonLevels);
             render();
         }
     });
@@ -120,6 +109,7 @@ function render() {
     shader.setMat4('u_model', modelMatrix);
     shader.setMat4('u_view', viewMatrix);
     shader.setVec3('u_viewPos', cameraPos);
+    shader.setInt('u_toonLevels', toonLevels);
     cylinder.draw(shader);
 
     // drawing the axes (using the axes's shader: see util.js)
@@ -161,24 +151,21 @@ async function main() {
         shader.setVec3("light.ambient", vec3.fromValues(0.2, 0.2, 0.2));
         shader.setVec3("light.diffuse", vec3.fromValues(0.7, 0.7, 0.7));
         shader.setVec3("light.specular", vec3.fromValues(1.0, 1.0, 1.0));
-        shader.setInt("material.diffuse", 0);
+        shader.setVec3("material.diffuse", vec3.fromValues(1.0, 0.5, 0.31));
         shader.setVec3("material.specular", vec3.fromValues(0.8, 0.8, 0.8));
         shader.setFloat("material.shininess", shininess);
         shader.setVec3("u_viewPos", cameraPos);
 
-        // bind the texture to the shader
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-
-        setupText(canvas, "DIRECTIONAL LIGHT ", 1);
+        setupText(canvas, "TOON SHADING ", 1);
         textOverlay2 = setupText(canvas, "arcball mode: " + arcBallMode, 2);
-        textOverlay3 = setupText(canvas, "shading mode: " + shadingMode, 3);
-        setupText(canvas, "press 'a' to change arcball mode", 4);
-        setupText(canvas, "press 'r' to reset arcball", 5);
-        setupText(canvas, "press 's' to switch to smooth shading", 6);
-        setupText(canvas, "press 'f' to switch to flat shading", 7);
+        textOverlay3 = setupText(canvas, "toon levels: " + toonLevels, 3);
+        setupText(canvas, "press a/r to change/reset arcball mode", 4);
+        setupText(canvas, "press 1-5 to change toon shading levels", 5);
 
         setupKeyboardEvents();
+
+        cylinder.copyVertexNormalsToNormals();
+        cylinder.updateNormals();
 
         // call the render function the first time for animation
         requestAnimationFrame(render);
