@@ -45,8 +45,9 @@ void main() {
     vec3 lightDir = normalize(light.direction);
     float dotNormLight = dot(norm, lightDir);
     float diff = max(dotNormLight, 0.0);
-    
+
     diff = quantize(diff, u_toonLevels);
+    
     vec3 diffuse = light.diffuse * diff * material.diffuse;  
     
     // specular
