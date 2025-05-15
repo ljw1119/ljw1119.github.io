@@ -10,7 +10,7 @@ import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
 const scene = new THREE.Scene();
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.x = -30;
 camera.position.y = 40;
 camera.position.z = 30;
@@ -34,7 +34,7 @@ orbitControls.enableDamping = true;
 
 
 // add subtle ambient lighting
-const ambientLight = new THREE.AmbientLight(0x3c3c3c);
+const ambientLight = new THREE.AmbientLight(0xEEEEEE);
 scene.add(ambientLight);
 
 // add directional light
@@ -147,14 +147,7 @@ PLANETS.forEach((planet, idx) => {
 // --- GUI ---
 const gui = new GUI();
 
-// Per-planet GUI folders
-planetObjects.forEach((planetObj) => {
-  const folder = gui.addFolder(planetObj.name);
-  folder.add(planetControls[planetObj.name], 'rotationSpeed', 0, 0.05, 0.001).name('Rotation Speed');
-  folder.add(planetControls[planetObj.name], 'orbitSpeed', 0, 0.05, 0.001).name('Orbit Speed');
-});
-
-// Camera toggle GUI
+// Camera toggle GUI (move to top, button + display)
 let perspectiveCamera = camera;
 let orthoCamera = null;
 let usingPerspective = true;
@@ -163,28 +156,48 @@ function createOrthoCamera() {
   const aspect = window.innerWidth / window.innerHeight;
   const d = 80;
   const ortho = new THREE.OrthographicCamera(
-    -d * aspect, d * aspect, d, -d, 0.1, 500
+    -d * aspect, d * aspect, d, -d, 0.1, 1000
   );
   ortho.position.copy(perspectiveCamera.position);
   ortho.lookAt(scene.position);
   return ortho;
 }
 
-const cameraFolder = gui.addFolder('Camera');
-const cameraParams = { type: 'Perspective' };
-cameraFolder.add(cameraParams, 'type', ['Perspective', 'Orthographic']).name('Type').onChange((val) => {
-  usingPerspective = (val === 'Perspective');
-  if (!orthoCamera) orthoCamera = createOrthoCamera();
-  // Sync position
-  if (usingPerspective) {
-    perspectiveCamera.position.copy(orthoCamera.position);
-    perspectiveCamera.lookAt(scene.position);
-    orbitControls.object = perspectiveCamera;
-  } else {
-    orthoCamera.position.copy(perspectiveCamera.position);
-    orthoCamera.lookAt(scene.position);
-    orbitControls.object = orthoCamera;
+const cameraParams = {
+  type: 'Perspective',
+  switchCamera: function() {
+    usingPerspective = !usingPerspective;
+    cameraParams.type = usingPerspective ? 'Perspective' : 'Orthographic';
+    if (!orthoCamera) orthoCamera = createOrthoCamera();
+    // Sync position
+    if (usingPerspective) {
+      perspectiveCamera.position.copy(orthoCamera.position);
+      perspectiveCamera.lookAt(scene.position);
+      orbitControls.object = perspectiveCamera;
+    } else {
+      orthoCamera.position.copy(perspectiveCamera.position);
+      orthoCamera.lookAt(scene.position);
+      orbitControls.object = orthoCamera;
+    }
+    // Update display
+    if (cameraTypeController) cameraTypeController.updateDisplay();
   }
+};
+
+// Create camera folder at the top
+const cameraFolder = gui.addFolder('Camera');
+// Move camera folder to the top of the GUI
+if (gui.domElement.firstChild !== cameraFolder.domElement) {
+  gui.domElement.insertBefore(cameraFolder.domElement, gui.domElement.firstChild);
+}
+cameraFolder.add(cameraParams, 'switchCamera').name('Switch Camera Type');
+let cameraTypeController = cameraFolder.add(cameraParams, 'type').name('Current Camera').listen();
+
+// Per-planet GUI folders
+planetObjects.forEach((planetObj) => {
+  const folder = gui.addFolder(planetObj.name);
+  folder.add(planetControls[planetObj.name], 'rotationSpeed', 0, 0.05, 0.001).name('Rotation Speed');
+  folder.add(planetControls[planetObj.name], 'orbitSpeed', 0, 0.05, 0.001).name('Orbit Speed');
 });
 
 // --- Window Resize ---
@@ -210,12 +223,12 @@ function render() {
   // Animate planets
   planetObjects.forEach((planetObj) => {
     // Orbit
-    planetObj.currentOrbit += planetControls[planetObj.name].orbitSpeed;
+    planetObj.currentOrbit -= planetControls[planetObj.name].orbitSpeed;
     const x = Math.cos(planetObj.currentOrbit) * PLANETS.find(p => p.name === planetObj.name).distance;
     const z = Math.sin(planetObj.currentOrbit) * PLANETS.find(p => p.name === planetObj.name).distance;
     planetObj.mesh.position.set(x, 10, z);
     // Rotation
-    planetObj.mesh.rotation.y += planetControls[planetObj.name].rotationSpeed;
+    planetObj.mesh.rotation.y -= planetControls[planetObj.name].rotationSpeed;
   });
 
   // Camera
