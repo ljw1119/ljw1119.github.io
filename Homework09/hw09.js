@@ -32,16 +32,6 @@ document.body.appendChild(stats.dom);
 const orbitControls = new OrbitControls(camera, renderer.domElement);
 orbitControls.enableDamping = true;
 
-// ground plane
-const planeGeometry = new THREE.PlaneGeometry(60, 40, 1, 1);
-const planeMaterial = new THREE.MeshLambertMaterial({color: 0xffffff});
-const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-plane.receiveShadow = true;
-plane.rotation.x = -0.5 * Math.PI;
-plane.position.x = 0;
-plane.position.y = 0;
-plane.position.z = 0;
-scene.add(plane);
 
 // add subtle ambient lighting
 const ambientLight = new THREE.AmbientLight(0x3c3c3c);
@@ -62,128 +52,176 @@ spotLight.target.position.set(0, 0, 0);
 spotLight.castShadow = true;
 scene.add(spotLight);
 
-// Cube
-const material = new THREE.MeshLambertMaterial({color: 0x44ff44});
-const geom = new THREE.BoxGeometry(5, 8, 3); // width, height, depth
-const cube = new THREE.Mesh(geom, material);
-cube.position.y = 4; // initial position (0, 4, 0)
-cube.castShadow = true;
-scene.add(cube);
+// --- Solar System Parameters ---
+const PLANETS = [
+  {
+    name: 'Mercury',
+    radius: 1.5,
+    distance: 20,
+    color: '#a6a6a6',
+    texture: 'Mercury.jpg',
+    rotationSpeed: 0.02,
+    orbitSpeed: 0.02,
+  },
+  {
+    name: 'Venus',
+    radius: 3,
+    distance: 35,
+    color: '#e39e1c',
+    texture: 'Venus.jpg',
+    rotationSpeed: 0.015,
+    orbitSpeed: 0.015,
+  },
+  {
+    name: 'Earth',
+    radius: 3.5,
+    distance: 50,
+    color: '#3498db',
+    texture: 'Earth.jpg',
+    rotationSpeed: 0.01,
+    orbitSpeed: 0.01,
+  },
+  {
+    name: 'Mars',
+    radius: 2.5,
+    distance: 65,
+    color: '#c0392b',
+    texture: 'Mars.jpg',
+    rotationSpeed: 0.008,
+    orbitSpeed: 0.008,
+  },
+];
 
-// AxesHelper
-const axesHelper = new THREE.AxesHelper(10); // size
-scene.add(axesHelper);
+// --- Texture Loader ---
+const textureLoader = new THREE.TextureLoader();
 
-// GUI
+// --- Sun ---
+const sunGeometry = new THREE.SphereGeometry(10, 32, 32);
+const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFF00 });
+const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+sun.position.set(0, 10, 0);
+sun.castShadow = false;
+sun.receiveShadow = false;
+scene.add(sun);
+
+// --- Planets ---
+const planetObjects = [];
+const planetControls = {};
+
+PLANETS.forEach((planet, idx) => {
+  // Pivot for orbit
+  const pivot = new THREE.Object3D();
+  scene.add(pivot);
+
+  // Texture
+  const texture = textureLoader.load(planet.texture);
+  const material = new THREE.MeshStandardMaterial({
+    map: texture,
+    roughness: 0.8,
+    metalness: 0.2,
+    color: planet.color,
+  });
+  const geometry = new THREE.SphereGeometry(planet.radius, 32, 32);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.position.set(planet.distance, 10, 0); // y=10 to match sun
+  pivot.add(mesh);
+
+  planetObjects.push({
+    name: planet.name,
+    mesh,
+    pivot,
+    rotationSpeed: planet.rotationSpeed,
+    orbitSpeed: planet.orbitSpeed,
+    currentOrbit: Math.random() * Math.PI * 2, // randomize start
+  });
+
+  // GUI controls for this planet
+  planetControls[planet.name] = {
+    rotationSpeed: planet.rotationSpeed,
+    orbitSpeed: planet.orbitSpeed,
+  };
+});
+
+// --- GUI ---
 const gui = new GUI();
 
-const controls = new function () {
-    this.scaleX = 1;  // scaleX 값을 담아 둘 변수: scaleX
-    this.scaleY = 1;
-    this.scaleZ = 1;
-
-    this.positionX = 0;
-    this.positionY = 4;
-    this.positionZ = 0;
-
-    this.rotationX = 0;
-    this.rotationY = 0;
-    this.rotationZ = 0;
-    this.scale = 1;
-
-    this.translateX = 0;
-    this.translateY = 0;
-    this.translateZ = 0;
-
-    this.visible = true;
-
-    this.translate = function () { // translate button 클릭 시 실행되는 함수
-
-        cube.translateX(controls.translateX);
-        cube.translateY(controls.translateY);
-        cube.translateZ(controls.translateZ);
-
-        controls.positionX = cube.position.x;
-        controls.positionY = cube.position.y;
-        controls.positionZ = cube.position.z;
-    }
-};
-
-const guiScale = gui.addFolder('scale'); // scale 폴더 시작
-guiScale.add(controls, 'scaleX', 0, 5);
-guiScale.add(controls, 'scaleY', 0, 5);
-guiScale.add(controls, 'scaleZ', 0, 5);
-
-const guiPosition = gui.addFolder('position'); // position 폴더 시작
-const contX = guiPosition.add(controls, 'positionX', -10, 10); // contX: controller
-const contY = guiPosition.add(controls, 'positionY', -4, 20);
-const contZ = guiPosition.add(controls, 'positionZ', -10, 10);
-
-contX.listen();  // contX 값이 변하는지를 체크
-contX.onChange(function (value) { // contX 값이 변하면 실행되는 함수
-    cube.position.x = controls.positionX;
+// Per-planet GUI folders
+planetObjects.forEach((planetObj) => {
+  const folder = gui.addFolder(planetObj.name);
+  folder.add(planetControls[planetObj.name], 'rotationSpeed', 0, 0.05, 0.001).name('Rotation Speed');
+  folder.add(planetControls[planetObj.name], 'orbitSpeed', 0, 0.05, 0.001).name('Orbit Speed');
 });
 
-contY.listen();
-contY.onChange(function (value) {
-    cube.position.y = controls.positionY;
+// Camera toggle GUI
+let perspectiveCamera = camera;
+let orthoCamera = null;
+let usingPerspective = true;
+
+function createOrthoCamera() {
+  const aspect = window.innerWidth / window.innerHeight;
+  const d = 80;
+  const ortho = new THREE.OrthographicCamera(
+    -d * aspect, d * aspect, d, -d, 0.1, 500
+  );
+  ortho.position.copy(perspectiveCamera.position);
+  ortho.lookAt(scene.position);
+  return ortho;
+}
+
+const cameraFolder = gui.addFolder('Camera');
+const cameraParams = { type: 'Perspective' };
+cameraFolder.add(cameraParams, 'type', ['Perspective', 'Orthographic']).name('Type').onChange((val) => {
+  usingPerspective = (val === 'Perspective');
+  if (!orthoCamera) orthoCamera = createOrthoCamera();
+  // Sync position
+  if (usingPerspective) {
+    perspectiveCamera.position.copy(orthoCamera.position);
+    perspectiveCamera.lookAt(scene.position);
+    orbitControls.object = perspectiveCamera;
+  } else {
+    orthoCamera.position.copy(perspectiveCamera.position);
+    orthoCamera.lookAt(scene.position);
+    orbitControls.object = orthoCamera;
+  }
 });
 
-contZ.listen();
-contZ.onChange(function (value) {
-    cube.position.z = controls.positionZ;
+// --- Window Resize ---
+window.addEventListener('resize', () => {
+  const aspect = window.innerWidth / window.innerHeight;
+  perspectiveCamera.aspect = aspect;
+  perspectiveCamera.updateProjectionMatrix();
+  if (orthoCamera) {
+    const d = 80;
+    orthoCamera.left = -d * aspect;
+    orthoCamera.right = d * aspect;
+    orthoCamera.top = d;
+    orthoCamera.bottom = -d;
+    orthoCamera.updateProjectionMatrix();
+  }
+  renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
-const guiRotation = gui.addFolder('rotation');
-guiRotation.add(controls, 'rotationX', -4, 4);
-guiRotation.add(controls, 'rotationY', -4, 4);
-guiRotation.add(controls, 'rotationZ', -4, 4);
-
-const guiTranslate = gui.addFolder('translate');
-guiTranslate.add(controls, 'translateX', -10, 10);
-guiTranslate.add(controls, 'translateY', -10, 10);
-guiTranslate.add(controls, 'translateZ', -10, 10);
-guiTranslate.add(controls, 'translate');
-
-gui.add(controls, 'visible');
-
-render();
 
 function render() {
+  orbitControls.update();
+  stats.update();
 
-    orbitControls.update();
-    stats.update();
+  // Animate planets
+  planetObjects.forEach((planetObj) => {
+    // Orbit
+    planetObj.currentOrbit += planetControls[planetObj.name].orbitSpeed;
+    const x = Math.cos(planetObj.currentOrbit) * PLANETS.find(p => p.name === planetObj.name).distance;
+    const z = Math.sin(planetObj.currentOrbit) * PLANETS.find(p => p.name === planetObj.name).distance;
+    planetObj.mesh.position.set(x, 10, z);
+    // Rotation
+    planetObj.mesh.rotation.y += planetControls[planetObj.name].rotationSpeed;
+  });
 
-    cube.visible = controls.visible;
-
-    // 한 frame 내에서 object의 transformation 순서
-    // Three.js 는 항상 scale -> rotation -> translation 순서로 변환을 적용한다.
-    // 만일 이 순서를 바꾸기 원한다면, object의 parent-child 관계를 이용하여 
-    // 변환 순서를 바꾸어 주어야 한다. 
-    // 
-    // Example: translate -> rotate 순서로 바꾸기
-    //
-    // const pivot = new THREE.Object3D(); // rotation의 중심이 될 parent object (dummy)
-    // scene.add(pivot);
-    //
-    // const satellite = new THREE.Mesh(new THREE.SphereGeometry(0.2), 
-    //                                  new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-    // satellite.position.set(3, 0, 0);  // 중심 (pivot) 으로부터 반지름 거리만큼 이동
-    // pivot.add(satellite);             // satellite의 parent object로 pivot을 지정
-    // 
-    // 애니메이션에서 pivot만 회전:
-    // function animate() {
-    //   requestAnimationFrame(animate);
-    //   pivot.rotation.y += 0.01;
-    //   renderer.render(scene, camera);
-    // }
-
-    cube.rotation.x = controls.rotationX;
-    cube.rotation.y = controls.rotationY;
-    cube.rotation.z = controls.rotationZ;
-
-    cube.scale.set(controls.scaleX, controls.scaleY, controls.scaleZ);
-
-    renderer.render(scene, camera);
-    requestAnimationFrame(render);
+  // Camera
+  const cam = usingPerspective ? perspectiveCamera : orthoCamera;
+  renderer.render(scene, cam);
+  requestAnimationFrame(render);
 }
+
+render();
