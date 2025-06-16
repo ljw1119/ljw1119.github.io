@@ -328,60 +328,82 @@
             <!-- Floating navigation bar -->
             <div id="floating-nav" class="fade-in">
                 <div class="nav-section">
-                    <span class="nav-title">Blocks</span>
-                    
-                    <div class="draggable-item" data-type="single-block">
-                        <div class="item-icon" id="single-block-preview"></div>
-                        <div class="item-name">Single</div>
-                    </div>
-                    
-                    <div class="draggable-item" data-type="long-block">
-                        <div class="item-icon" id="long-block-preview"></div>
-                        <div class="item-name">Long</div>
-                    </div>
-                </div>
-                
-                <div class="nav-divider"></div>
-                
-                <div class="nav-section">
-                    <span class="nav-title">Furniture</span>
-                    
-                    <div class="draggable-item" data-type="bed">
-                        <div class="item-icon" id="bed-preview"></div>
-                        <div class="item-name">Bed</div>
-                    </div>
-                    
-                    <div class="draggable-item" data-type="chair">
-                        <div class="item-icon" id="chair-preview"></div>
-                        <div class="item-name">Chair</div>
-                    </div>
-                    
-                    <div class="draggable-item" data-type="desk">
-                        <div class="item-icon" id="desk-preview"></div>
-                        <div class="item-name">Desk</div>
-                    </div>
-                    
-                    <div class="draggable-item" data-type="drawer">
-                        <div class="item-icon" id="drawer-preview"></div>
-                        <div class="item-name">Drawer</div>
-                    </div>
-                    
-                    <div class="draggable-item" data-type="lamp">
-                        <div class="item-icon" id="lamp-preview"></div>
-                        <div class="item-name">Lamp</div>
-                    </div>
-                    
-                    <div class="draggable-item" data-type="shelf">
-                        <div class="item-icon" id="shelf-preview"></div>
-                        <div class="item-name">Shelf</div>
-                    </div>
-                    
-                    <div class="draggable-item" data-type="trashcan">
-                        <div class="item-icon" id="trashcan-preview"></div>
-                        <div class="item-name">Trash</div>
+                    <h3>Furniture</h3>
+                    <div id="furniture-items" class="draggable-items">
+                        <div class="draggable-item" data-type="bed">
+                            <div class="item-icon" id="bed-preview"></div>
+                            <div class="item-name">Bed</div>
+                        </div>
+                        <div class="draggable-item" data-type="chair">
+                            <div class="item-icon" id="chair-preview"></div>
+                            <div class="item-name">Chair</div>
+                        </div>                        
+                        <div class="draggable-item" data-type="desk">
+                            <div class="item-icon" id="desk-preview"></div>
+                            <div class="item-name">Desk</div>
+                        </div>
+                        <div class="draggable-item" data-type="drawer">
+                            <div class="item-icon" id="drawer-preview"></div>
+                            <div class="item-name">Drawer</div>
+                        </div>
+                        <div class="draggable-item" data-type="lamp">
+                            <div class="item-icon" id="lamp-preview"></div>
+                            <div class="item-name">Lamp</div>
+                        </div>
+                        <div class="draggable-item" data-type="shelf">
+                            <div class="item-icon" id="shelf-preview"></div>
+                            <div class="item-name">Shelf</div>
+                        </div>
+                        <div class="draggable-item" data-type="trashcan">
+                            <div class="item-icon" id="trashcan-preview"></div>
+                            <div class="item-name">Trash</div>
+                        </div>
+                        <div class="draggable-item" data-type="sofa">
+                            <div class="item-icon" id="sofa-preview"></div>
+                            <div class="item-name">Sofa</div>
+                        </div>
+                        <div class="draggable-item" data-type="table">
+                            <div class="item-icon" id="table-preview"></div>
+                            <div class="item-name">Table</div>
+                        </div>
+                        <div class="draggable-item" data-type="tv">
+                            <div class="item-icon" id="tv-preview"></div>
+                            <div class="item-name">TV</div>
+                        </div>
                     </div>
                 </div>
-                
+
+                <!-- Wall decoration items (hidden by default) -->
+                <div class="nav-section" style="display: none;">
+                    <h3>Wall Decorations</h3>
+                    <div id="wall-items" class="draggable-items">
+                        <div class="draggable-item" draggable="true" data-type="frame">
+                            <div class="item-icon" id="frame-preview"></div>
+                            <div class="item-name">Frame</div>
+                        </div>
+                        <div class="draggable-item" draggable="true" data-type="poster">
+                            <div class="item-icon" id="poster-preview"></div>
+                            <div class="item-name">Poster</div>
+                        </div>
+                        <div class="draggable-item" draggable="true" data-type="board">
+                            <div class="item-icon" id="board-preview"></div>
+                            <div class="item-name">Board</div>
+                        </div>
+                        <div class="draggable-item" draggable="true" data-type="clock">
+                            <div class="item-icon" id="clock-preview"></div>
+                            <div class="item-name">Clock</div>
+                        </div>
+                        <div class="draggable-item" draggable="true" data-type="tv">
+                            <div class="item-icon" id="tv-preview"></div>
+                            <div class="item-name">TV</div>
+                        </div>
+                        <div class="draggable-item" draggable="true" data-type="airconditioner">
+                            <div class="item-icon" id="airconditioner-preview"></div>
+                            <div class="item-name">AC</div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="nav-divider"></div>
                 
                 <div class="nav-section">
@@ -409,6 +431,11 @@
                     </div>
                 </div>
             </div>
+
+            <!--Grid ON/OFF-->
+            <button class="control-button" id="grid-toggle" onclick="gridOnOff()" style="position: absolute; bottom: 25px; right: 150px; background: rgba(44, 62, 80, 0.95);">   
+                田
+            </button>
         </div>
     </div>
 

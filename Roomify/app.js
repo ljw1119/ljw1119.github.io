@@ -3,6 +3,16 @@ let scene, camera, renderer, controls;
 let room, singleBlockModel, longBlockModel;
 // New furniture models
 let bedModel, chairModel, deskModel, drawerModel, lampModel, shelfModel, trashcanModel;
+// Additional furniture models
+let airConditionerModel, boardModel, clockModel;
+let closetModel, closet2Model, closet3Model;
+let doorModel, door2Model;
+let frameModel, frame2Model, frame3Model;
+let posterModel, poster2Model, poster3Model;
+let rackModel, rack2Model;
+let sofaModel, sofa2Model;
+let tableModel, table2Model;
+let tvModel;
 let placedObjects = [];
 let isDragging = false;
 let dragObject = null;
@@ -14,6 +24,9 @@ let originalCameraPosition;
 let originalCameraTarget;
 let isRotating = false;
 let selectedObject = null;
+let isWallView = false;
+let wallBoxes = []; // Array to store wall click boxes
+let griddisplay = true; // Grid display toggle
 
 // Edit mode variables
 let isEditMode = false;
@@ -21,9 +34,9 @@ let isMoveMode = false;
 let movePreviewObject = null;
 
 // Preview renderers for sidebar
-let singleBlockPreviewRenderer, longBlockPreviewRenderer;
-let singleBlockPreviewScene, longBlockPreviewScene;
-let singleBlockPreviewCamera, longBlockPreviewCamera;
+let previewRenderers = {};
+let previewScenes = {};
+let previewCameras = {};
 
 // Constants
 const ROOM_SIZE = 8;
@@ -31,21 +44,31 @@ const BLOCK_HEIGHT = 1;
 const BLOCK_SCALE = 0.075; // Exactly between 0.05 and 0.1 for perfect size
 const ROOM_SCALE = 0.005;  // Decreased from 0.01 to 0.005 (half size)
 
+// Add original FOV as a global variable
+let originalFOV = 75; // Default FOV value
+const WALL_VIEW_FOV = 55; // Narrower FOV for wall view
+
+// Add wall grid variables
+let wallGrids = [];
+const WALL_GRID_SIZE = 8; // 8 columns
+const WALL_GRID_HEIGHT = 6; // 6 rows
+const WALL_TILE_SIZE = 1; // 1x1 tile size
+
 // Initialize the application
 function init() {
     // Create scene
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x2c3e50);
+    scene.background = new THREE.Color(0x3c8491);
     
     // Create camera - closer zoom
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(8, 6, 8);
-    camera.lookAt(0, 0, 0);
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
     
-    // Store original camera position and target for spring-back
-    originalCameraPosition = camera.position.clone();
-    originalCameraTarget = new THREE.Vector3(0, 0, 0);
-    
+    originalCameraPosition = new THREE.Vector3(8, 7, 8);
+    originalCameraTarget = new THREE.Vector3(0, 1, 0);
+
+    camera.position.set(originalCameraPosition.x,originalCameraPosition.y, originalCameraPosition.z);
+    camera.lookAt(originalCameraTarget.x, originalCameraTarget.y, originalCameraTarget.z);
+
     // Create renderer - now full screen
     const canvas = document.getElementById('three-canvas');
     renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
@@ -63,7 +86,11 @@ function init() {
     controls.screenSpacePanning = false;
     controls.minDistance = 6;
     controls.maxDistance = 20;
-    controls.maxPolarAngle = Math.PI / 2;
+    const deg = Math.PI / 180;
+    controls.maxPolarAngle = deg * 90;
+    controls.minPolarAngle = deg * 0;
+    controls.maxAzimuthAngle = deg * 90; 
+    controls.minAzimuthAngle = deg * 0;
     
     // Custom spring-back behavior
     controls.addEventListener('start', onControlsStart);
@@ -84,6 +111,9 @@ function init() {
     // Create floor grid
     createFloorGrid();
     
+    // Create wall click boxes
+    createWallClickBoxes();
+    
     // Start render loop
     animate();
 }
@@ -92,9 +122,9 @@ function setupLighting() {
     // Ambient light
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
     scene.add(ambientLight);
-    
+
     // Main directional light
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
     directionalLight.position.set(10, 15, 5);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;
@@ -106,12 +136,12 @@ function setupLighting() {
     directionalLight.shadow.camera.top = 15;
     directionalLight.shadow.camera.bottom = -15;
     scene.add(directionalLight);
-    
+
     // Fill light
     const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
     fillLight.position.set(-5, 10, -5);
     scene.add(fillLight);
-    
+
     // Rim light
     const rimLight = new THREE.DirectionalLight(0x85c1e9, 0.4);
     rimLight.position.set(0, 5, -10);
@@ -152,8 +182,21 @@ function createFloorGrid() {
     
     // Create grid lines with proper positioning
     const gridHelper = new THREE.GridHelper(ROOM_SIZE, ROOM_SIZE, 0x7f8c8d, 0x95a5a6);
+    gridHelper.name = 'gridHelper';
     gridHelper.position.y = 0.01;
     scene.add(gridHelper);
+    griddisplay = true; // Set grid display to true
+}
+
+function gridOnOff() {
+    if (griddisplay) {
+        scene.remove(scene.getObjectByName('gridHelper'));
+        console.log('Grid lines removed');
+        griddisplay = false;
+    }
+    else {
+        createFloorGrid();
+    }
 }
 
 // Fixed grid snapping function that handles rotation
@@ -162,8 +205,63 @@ function snapToGrid(worldX, worldZ, itemType = 'single-block', rotationY = 0) {
     // Grid squares are 1x1 units
     
     let gridX, gridZ;
-    
-    if (itemType === 'single-block' || itemType === 'lamp' || itemType === 'trashcan' || itemType === 'drawer' || itemType === 'shelf' || itemType === 'chair') {
+        
+    if (itemType === 'desk' || itemType === 'tv') {
+        // 1x3 or 3x1 objects (desk) depend on rotation
+        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
+        
+        if (isHorizontal) {
+            gridX = Math.round(worldX) + 0.5;
+            gridZ = Math.floor(worldZ) + 0.5;
+                
+            gridX = Math.max(-3.5, Math.min(3.5, gridX));
+            gridZ = Math.max(-2.5, Math.min(2.5, gridZ));
+        } else {
+            gridX = Math.floor(worldX) + 0.5; 
+            gridZ = Math.round(worldZ) + 0.5;
+            
+            gridX = Math.max(-2.5, Math.min(2.5, gridX));
+            gridZ = Math.max(-3.5, Math.min(3.5, gridZ));
+        }
+    } 
+    else if(itemType === 'sofa2' || itemType === 'closet' || itemType === 'closet2') {
+        // 2x1 or 1x2 objects (long-block) and
+        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
+        
+        if (isHorizontal) {
+            gridX = Math.round(worldX) + 0.5;
+            gridZ = Math.floor(worldZ) + 0.5;
+                
+            gridX = Math.max(-3, Math.min(3, gridX));
+            gridZ = Math.max(-2.5, Math.min(2.5, gridZ));
+        } else {
+            gridX = Math.floor(worldX) + 0.5; 
+            gridZ = Math.round(worldZ) + 0.5;
+            
+            gridX = Math.max(-3, Math.min(3, gridX));
+            gridZ = Math.max(-3.5, Math.min(3.5, gridZ));
+        }
+    } 
+    else if (itemType === 'bed') {
+        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
+        if (isHorizontal) {
+            gridX = Math.round(worldX);
+            gridZ = Math.floor(worldZ);
+                
+            gridX = Math.max(-3, Math.min(3, gridX));
+            gridZ = Math.max(-2, Math.min(2, gridZ));
+        } else {
+            gridX = Math.floor(worldX); 
+            gridZ = Math.round(worldZ);
+            
+            gridX = Math.max(-2, Math.min(2, gridX));
+            gridZ = Math.max(-3, Math.min(3, gridZ));
+        }
+    }
+    else { 
         // 1x1 objects always snap to center of grid squares (half-integer positions)
         gridX = Math.floor(worldX) + 0.5;
         gridZ = Math.floor(worldZ) + 0.5;
@@ -171,97 +269,7 @@ function snapToGrid(worldX, worldZ, itemType = 'single-block', rotationY = 0) {
         // Clamp to room bounds: -3.5 to 3.5
         gridX = Math.max(-3.5, Math.min(3.5, gridX));
         gridZ = Math.max(-3.5, Math.min(3.5, gridZ));
-        
-    } else if (itemType === 'long-block' || itemType === 'desk') {
-        // 2x1 or 1x2 objects (long-block) and 1x3 or 3x1 objects (desk) depend on rotation
-        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
-        
-        if (isHorizontal) {
-            if (itemType === 'long-block') {
-                // Horizontal long-block (2x1): spans 2 grid squares horizontally
-                // Center should be at (integer, half-integer)
-                gridX = Math.round(worldX);
-                gridZ = Math.floor(worldZ) + 0.5;
-                
-                // Clamp bounds: X needs space for 2 units, Z normal
-                gridX = Math.max(-3, Math.min(3, gridX));
-                gridZ = Math.max(-3.5, Math.min(3.5, gridZ));
-            } else {
-                // Horizontal desk (3x1): spans 3 grid squares horizontally
-                // Center should be at (half-integer, half-integer)
-                gridX = Math.floor(worldX) + 0.5;
-                gridZ = Math.floor(worldZ) + 0.5;
-                
-                // Clamp bounds: X needs space for 3 units, Z normal
-                gridX = Math.max(-2.5, Math.min(2.5, gridX));
-                gridZ = Math.max(-3.5, Math.min(3.5, gridZ));
-            }
-        } else {
-            if (itemType === 'long-block') {
-                // Vertical long-block (1x2): spans 2 grid squares vertically  
-                // Center should be at (half-integer, integer)
-                gridX = Math.floor(worldX) + 0.5;
-                gridZ = Math.round(worldZ);
-                
-                // Clamp bounds: X normal, Z needs space for 2 units
-                gridX = Math.max(-3.5, Math.min(3.5, gridX));
-                gridZ = Math.max(-3, Math.min(3, gridZ));
-            } else {
-                // Vertical desk (1x3): spans 3 grid squares vertically
-                // Center should be at (half-integer, half-integer)
-                gridX = Math.floor(worldX) + 0.5;
-                gridZ = Math.floor(worldZ) + 0.5;
-                
-                // Clamp bounds: X normal, Z needs space for 3 units
-                gridX = Math.max(-3.5, Math.min(3.5, gridX));
-                gridZ = Math.max(-2.5, Math.min(2.5, gridZ));
-            }
-        }
-        
-    } else if (itemType === 'bed') {
-        // Bed (3x4/4x3) depends on rotation
-        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
-        
-         if (itemType === 'bed') {
-            if (isHorizontal) {
-                // Horizontal bed (4x3): 4 wide, 3 deep
-                // 4 units wide: center at integer (covers 4 grid squares evenly)
-                // 3 units deep: center at half-integer (covers 3 grid squares with center in middle)
-                gridX = Math.round(worldX);        // Integer for 4-unit width
-                gridZ = Math.floor(worldZ) + 0.5; // Half-integer for 3-unit depth
-                
-                // Clamp bounds: X needs space for 4 units (-2 to +2), Z needs space for 3 units (-1.5 to +1.5)
-                gridX = Math.max(-2, Math.min(2, gridX));
-                gridZ = Math.max(-2.5, Math.min(2.5, gridZ));
-            } else {
-                // Vertical bed (3x4): 3 wide, 4 deep
-                // 3 units wide: center at half-integer (covers 3 grid squares with center in middle)
-                // 4 units deep: center at integer (covers 4 grid squares evenly)
-                gridX = Math.floor(worldX) + 0.5; // Half-integer for 3-unit width
-                gridZ = Math.round(worldZ);        // Integer for 4-unit depth
-                
-                // Clamp bounds: X needs space for 3 units (-1.5 to +1.5), Z needs space for 4 units (-2 to +2)
-                gridX = Math.max(-2.5, Math.min(2.5, gridX));
-                gridZ = Math.max(-2, Math.min(2, gridZ));
-            }
-        }
-    } else if (itemType === 'chair') {
-        // Changed chair to 1x1 footprint
-        return { width: 1, depth: 1 };
-    } else if (itemType === 'desk') {
-        // Changed desk to 1x3 footprint
-        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
-        
-        if (isHorizontal) {
-            return { width: 3, depth: 1 }; // When rotated 90/270 degrees
-        } else {
-            return { width: 1, depth: 3 }; // Default orientation
-        }
     }
-    
     return { x: gridX, z: gridZ };
 }
 
@@ -270,50 +278,36 @@ function getObjectDimensions(type, rotationY = 0) {
     if (type === 'single-block') {
         return { width: 1, depth: 1 };
     } else if (type === 'long-block') {
-        // Normalize rotation
         const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-        
-        // Long blocks are "horizontal" when rotation is π/2 or 3π/2 (90° or 270°)
-        // Long blocks are "vertical" when rotation is 0 or π (0° or 180°)
         const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
-        
-        if (isHorizontal) {
-            return { width: 2, depth: 1 };
-        } else {
-            return { width: 1, depth: 2 };
-        }
+        return isHorizontal ? { width: 2, depth: 1 } : { width: 1, depth: 2 };
     } else if (type === 'bed') {
-        // Normalize rotation for bed - Changed to 4x3 footprint
         const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
         const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
-        
-        if (isHorizontal) {
-            return { width: 4, depth: 3 }; // When rotated 90/270 degrees
-        } else {
-            return { width: 3, depth: 4 }; // Default orientation
-        }
+        return isHorizontal ? { width: 2, depth: 4 } : { width: 4, depth: 2 };
     } else if (type === 'desk') {
-        // Changed desk to 1x3 footprint
         const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
         const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
-        
-        if (isHorizontal) {
-            return { width: 3, depth: 1 }; // When rotated 90/270 degrees
-        } else {
-            return { width: 1, depth: 3 }; // Default orientation
-        }
-    } else if (type === 'chair') {
-        // Changed chair to 1x1 footprint
-        return { width: 1, depth: 1 };
-    } else if (type === 'drawer') {
-        // Changed drawer to 1x1 footprint
-        return { width: 1, depth: 1 };
-    } else if (type === 'lamp') {
-        return { width: 1, depth: 1 };
-    } else if (type === 'shelf') {
-        // Changed shelf to 1x1 footprint
-        return { width: 1, depth: 1 };
-    } else if (type === 'trashcan') {
+        return isHorizontal ? { width: 1, depth: 3 } : { width: 3, depth: 1 };
+    } else if (type === 'closet' || type === 'closet2') {
+        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
+        return isHorizontal ? { width: 2, depth: 1 } : { width: 1, depth: 2 };
+    } else if (type === 'rack2') {
+        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
+        return isHorizontal ? { width: 2, depth: 1 } : { width: 1, depth: 2 };
+
+    } else if (type === 'sofa2') {
+        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
+        return isHorizontal ? { width: 3, depth: 1 } : { width: 1, depth: 3 };
+    } else if (type === 'tv') {
+        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
+        return isHorizontal ? { width: 1, depth: 3 } : { width: 3, depth: 1 };
+    }
+    else {
         return { width: 1, depth: 1 };
     }
     return { width: 1, depth: 1 }; // Default
@@ -389,7 +383,8 @@ function loadModels() {
                 }
             }
         });
-        
+        room.castShadow = true;
+        room.receiveShadow = true;
         scene.add(room);
         console.log('Room loaded and added to scene');
     }, (progress) => {
@@ -507,15 +502,37 @@ function loadModels() {
         createFallbackBlock('long');
     });
 
-    // Load furniture models
+    // Load all furniture models
     const furnitureItems = [
-        { file: 'Bed.fbx', variable: 'bedModel', scale: 0.07 },          // Reduced from 0.08 - make bed tiny bit smaller
-        { file: 'Chair.fbx', variable: 'chairModel', scale: 0.1 },      // Keep same
-        { file: 'Desk.fbx', variable: 'deskModel', scale: 0.08 },        // Increased from 0.06 - make desk tiny bit bigger  
-        { file: 'Drawer.fbx', variable: 'drawerModel', scale: 0.08 },    // Keep same
-        { file: 'Lamp.fbx', variable: 'lampModel', scale: 0.08 },        // Keep same
-        { file: 'Shelf.fbx', variable: 'shelfModel', scale: 0.07 },      // Keep same
-        { file: 'Trashcan.fbx', variable: 'trashcanModel', scale: 0.06 } // Keep same
+        // Existing models
+        { file: 'Bed.fbx', variable: 'bedModel', scale: 0.07 },
+        { file: 'Chair.fbx', variable: 'chairModel', scale: 0.1 },
+        { file: 'Desk.fbx', variable: 'deskModel', scale: 0.08 },
+        { file: 'Drawer.fbx', variable: 'drawerModel', scale: 0.08 },
+        { file: 'Lamp.fbx', variable: 'lampModel', scale: 0.08 },
+        { file: 'Shelf.fbx', variable: 'shelfModel', scale: 0.07 },
+        { file: 'Trashcan.fbx', variable: 'trashcanModel', scale: 0.1 },
+        { file: 'AirConditioner.fbx', variable: 'airConditionerModel', scale: 0.08 },
+        { file: 'Board.fbx', variable: 'boardModel', scale: 0.08 },
+        { file: 'Clock.fbx', variable: 'clockModel', scale: 0.08 },
+        { file: 'Closet.fbx', variable: 'closetModel', scale: 0.08 },
+        { file: 'Closet2.fbx', variable: 'closet2Model', scale: 0.08 },
+        { file: 'Closet3.fbx', variable: 'closet3Model', scale: 0.08 },
+        { file: 'Door.fbx', variable: 'doorModel', scale: 0.08 },
+        { file: 'Door2.fbx', variable: 'door2Model', scale: 0.08 },
+        { file: 'Frame.fbx', variable: 'frameModel', scale: 0.08 },
+        { file: 'Frame2.fbx', variable: 'frame2Model', scale: 0.08 },
+        { file: 'Frame3.fbx', variable: 'frame3Model', scale: 0.08 },
+        { file: 'Poster.fbx', variable: 'posterModel', scale: 0.08 },
+        { file: 'Poster2.fbx', variable: 'poster2Model', scale: 0.08 },
+        { file: 'Poster3.fbx', variable: 'poster3Model', scale: 0.08 },
+        { file: 'Rack.fbx', variable: 'rackModel', scale: 0.08 },
+        { file: 'Rack2.fbx', variable: 'rack2Model', scale: 0.08 },
+        { file: 'Sofa.fbx', variable: 'sofaModel', scale: 0.08 },
+        { file: 'Sofa2.fbx', variable: 'sofa2Model', scale: 0.08 },
+        { file: 'Table.fbx', variable: 'tableModel', scale: 0.08 },
+        { file: 'Table2.fbx', variable: 'table2Model', scale: 0.08 },
+        { file: 'TV.fbx', variable: 'tvModel', scale: 0.08 }
     ];
 
     furnitureItems.forEach(item => {
@@ -527,6 +544,7 @@ function loadModels() {
             
             // Rotate the FBX model FIRST, before calculating center
             fbx.rotation.x = -(Math.PI / 2); // -90 degrees in radians
+            fbx.castShadow = true;
             
             // Create a wrapper group to properly center the model
             const wrapper = new THREE.Group();
@@ -557,38 +575,8 @@ function loadModels() {
             const furnitureType = item.file.toLowerCase().replace('.fbx', '');
             console.log(`Assigning ${furnitureType} model to global variable`);
             
-            switch(furnitureType) {
-                case 'bed':
-                    bedModel = wrapper;
-                    console.log('Bed model assigned:', bedModel);
-                    break;
-                case 'chair':
-                    chairModel = wrapper;
-                    console.log('Chair model assigned:', chairModel);
-                    break;
-                case 'desk':
-                    deskModel = wrapper;
-                    console.log('Desk model assigned:', deskModel);
-                    break;
-                case 'drawer':
-                    drawerModel = wrapper;
-                    console.log('Drawer model assigned:', drawerModel);
-                    break;
-                case 'lamp':
-                    lampModel = wrapper;
-                    console.log('Lamp model assigned:', lampModel);
-                    break;
-                case 'shelf':
-                    shelfModel = wrapper;
-                    console.log('Shelf model assigned:', shelfModel);
-                    break;
-                case 'trashcan':
-                    trashcanModel = wrapper;
-                    console.log('Trashcan model assigned:', trashcanModel);
-                    break;
-                default:
-                    console.error(`Unknown furniture type: ${furnitureType}`);
-            }
+            // Use eval to dynamically assign to the correct variable
+            eval(`${item.variable} = wrapper`);
             
             // Create model preview
             createModelPreview(wrapper, `${furnitureType}-preview`);
@@ -640,7 +628,7 @@ function createModelPreview(model, containerId) {
     
     // Adjust camera based on model size but don't move the model
     const maxDim = Math.max(size.x, size.y, size.z);
-    previewCamera.position.set(maxDim * 1.5, maxDim * 1.2, maxDim * 1.5);
+    previewCamera.position.set(maxDim, maxDim, maxDim);
     previewCamera.lookAt(0, 0, 0);
     
     previewScene.add(previewModel);
@@ -649,15 +637,9 @@ function createModelPreview(model, containerId) {
     container.appendChild(previewRenderer.domElement);
     
     // Store references for animation
-    if (containerId === 'single-block-preview') {
-        singleBlockPreviewRenderer = previewRenderer;
-        singleBlockPreviewScene = previewScene;
-        singleBlockPreviewCamera = previewCamera;
-    } else {
-        longBlockPreviewRenderer = previewRenderer;
-        longBlockPreviewScene = previewScene;
-        longBlockPreviewCamera = previewCamera;
-    }
+    previewRenderers[containerId] = previewRenderer;
+    previewScenes[containerId] = previewScene;
+    previewCameras[containerId] = previewCamera;
     
     // Render the preview
     previewRenderer.render(previewScene, previewCamera);
@@ -678,7 +660,7 @@ function createFallbackRoom() {
     const group = new THREE.Group();
     
     const wallGeometry = new THREE.BoxGeometry(ROOM_SIZE, 4, 0.2);
-    const wallMaterial = new THREE.MeshLambertMaterial({ color: 0x5d6d7e });
+    const wallMaterial = new THREE.MeshBasicMaterial({ color: 0x5d6d7e });
     
     const backWall = new THREE.Mesh(wallGeometry, wallMaterial);
     backWall.position.set(0, 2, -ROOM_SIZE/2);
@@ -701,7 +683,7 @@ function createFallbackBlock(type) {
     console.log(`Creating fallback ${type} block`);
     const width = type === 'long' ? 2 : 1;
     const geometry = new THREE.BoxGeometry(width, BLOCK_HEIGHT, 1);
-    const material = new THREE.MeshLambertMaterial({ 
+    const material = new THREE.MeshBasicMaterial({ 
         color: type === 'long' ? 0x2980b9 : 0x3498db  // Blue colors instead of orange
     });
     const mesh = new THREE.Mesh(geometry, material);
@@ -710,7 +692,6 @@ function createFallbackBlock(type) {
     
     if (type === 'long') {
         // Rotate long block 90 degrees to match the FBX version
-        mesh.rotation.y = Math.PI / 2;
         longBlockModel = mesh;
         createModelPreview(mesh, 'long-block-preview');
     } else {
@@ -726,7 +707,7 @@ function onControlsStart() {
 function onControlsEnd() {
     isRotating = false;
     setTimeout(() => {
-        if (!isRotating) {
+        if (!isRotating && !isWallView) {
             springBackCamera();
         }
     }, 1500);
@@ -851,6 +832,48 @@ function startDragPreview(itemType) {
         modelToPreview = shelfModel.clone();
     } else if (itemType === 'trashcan' && trashcanModel) {
         modelToPreview = trashcanModel.clone();
+    } else if (itemType === 'airconditioner' && airConditionerModel) {
+        modelToPreview = airConditionerModel.clone();
+    } else if (itemType === 'board' && boardModel) {
+        modelToPreview = boardModel.clone();
+    } else if (itemType === 'clock' && clockModel) {
+        modelToPreview = clockModel.clone();
+    } else if (itemType === 'closet' && closetModel) {
+        modelToPreview = closetModel.clone();
+    } else if (itemType === 'closet2' && closet2Model) {
+        modelToPreview = closet2Model.clone();
+    } else if (itemType === 'closet3' && closet3Model) {
+        modelToPreview = closet3Model.clone();
+    } else if (itemType === 'door' && doorModel) {
+        modelToPreview = doorModel.clone();
+    } else if (itemType === 'door2' && door2Model) {
+        modelToPreview = door2Model.clone();
+    } else if (itemType === 'frame' && frameModel) {
+        modelToPreview = frameModel.clone();
+    } else if (itemType === 'frame2' && frame2Model) {
+        modelToPreview = frame2Model.clone();
+    } else if (itemType === 'frame3' && frame3Model) {
+        modelToPreview = frame3Model.clone();
+    } else if (itemType === 'poster' && posterModel) {
+        modelToPreview = posterModel.clone();
+    } else if (itemType === 'poster2' && poster2Model) {
+        modelToPreview = poster2Model.clone();
+    } else if (itemType === 'poster3' && poster3Model) {
+        modelToPreview = poster3Model.clone();
+    } else if (itemType === 'rack' && rackModel) {
+        modelToPreview = rackModel.clone();
+    } else if (itemType === 'rack2' && rack2Model) {
+        modelToPreview = rack2Model.clone();
+    } else if (itemType === 'sofa' && sofaModel) {
+        modelToPreview = sofaModel.clone();
+    } else if (itemType === 'sofa2' && sofa2Model) {
+        modelToPreview = sofa2Model.clone();
+    } else if (itemType === 'table' && tableModel) {
+        modelToPreview = tableModel.clone();
+    } else if (itemType === 'table2' && table2Model) {
+        modelToPreview = table2Model.clone();
+    } else if (itemType === 'tv' && tvModel) {
+        modelToPreview = tvModel.clone();
     }
     
     if (modelToPreview) {
@@ -859,19 +882,41 @@ function startDragPreview(itemType) {
         if (itemType === 'single-block' || itemType === 'long-block') {
             objectScale = BLOCK_SCALE;
         } else if (itemType === 'bed') {
-            objectScale = 0.07;  // Keep same
+            objectScale = 0.07;
         } else if (itemType === 'chair') {
-            objectScale = 0.06;  // Updated to match user's change
+            objectScale = 0.06;
         } else if (itemType === 'desk') {
-            objectScale = 0.06;  // Keep same
+            objectScale = 0.06;
         } else if (itemType === 'drawer') {
-            objectScale = 0.06;  // Keep same
+            objectScale = 0.06;
         } else if (itemType === 'shelf') {
-            objectScale = 0.08;  // Keep same
+            objectScale = 0.08;
         } else if (itemType === 'lamp') {
-            objectScale = 0.08;  // Keep same
+            objectScale = 0.08;
         } else if (itemType === 'trashcan') {
-            objectScale = 0.06;  // Keep same
+            objectScale = 0.06;
+        } else if (itemType === 'airconditioner') {
+            objectScale = 0.08;
+        } else if (itemType === 'board') {
+            objectScale = 0.08;
+        } else if (itemType === 'clock') {
+            objectScale = 0.08;
+        } else if (itemType === 'closet' || itemType === 'closet2' || itemType === 'closet3') {
+            objectScale = 0.08;
+        } else if (itemType === 'door' || itemType === 'door2') {
+            objectScale = 0.08;
+        } else if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3') {
+            objectScale = 0.08;
+        } else if (itemType === 'poster' || itemType === 'poster2' || itemType === 'poster3') {
+            objectScale = 0.08;
+        } else if (itemType === 'rack' || itemType === 'rack2') {
+            objectScale = 0.08;
+        } else if (itemType === 'sofa' || itemType === 'sofa2') {
+            objectScale = 0.06;
+        } else if (itemType === 'table' || itemType === 'table2') {
+            objectScale = 0.08;
+        } else if (itemType === 'tv') {
+            objectScale = 0.08;
         } else {
             objectScale = BLOCK_SCALE; // Default fallback
         }
@@ -896,7 +941,7 @@ function startDragPreview(itemType) {
                                 return clonedMat;
                             } else {
                                 // Create a fallback material if cloning fails
-                                const fallbackMat = new THREE.MeshLambertMaterial({
+                                const fallbackMat = new THREE.MeshBasicMaterial({
                                     color: 0x3498db,
                                     transparent: true,
                                     opacity: 0.6
@@ -912,7 +957,7 @@ function startDragPreview(itemType) {
                             child.material.opacity = 0.6;
                         } else {
                             // Create a fallback material if cloning fails
-                            child.material = new THREE.MeshLambertMaterial({
+                            child.material = new THREE.MeshBasicMaterial({
                                 color: 0x3498db,
                                 transparent: true,
                                 opacity: 0.6
@@ -922,7 +967,7 @@ function startDragPreview(itemType) {
                 } catch (error) {
                     console.warn('Failed to clone material for preview, using fallback:', error);
                     // Create a fallback material
-                    child.material = new THREE.MeshLambertMaterial({
+                    child.material = new THREE.MeshBasicMaterial({
                         color: 0x3498db,
                         transparent: true,
                         opacity: 0.6
@@ -1010,44 +1055,85 @@ function addObjectToScene(itemType, mouseX, mouseY) {
     
     if (itemType === 'single-block' && singleBlockModel) {
         modelToAdd = singleBlockModel.clone();
-        console.log('Single block model cloned');
     } else if (itemType === 'long-block' && longBlockModel) {
         modelToAdd = longBlockModel.clone();
-        console.log('Long block model cloned');
     } else if (itemType === 'bed' && bedModel) {
         modelToAdd = bedModel.clone();
-        console.log('Bed model cloned');
     } else if (itemType === 'chair' && chairModel) {
         modelToAdd = chairModel.clone();
-        console.log('Chair model cloned');
     } else if (itemType === 'desk' && deskModel) {
         modelToAdd = deskModel.clone();
-        console.log('Desk model cloned');
     } else if (itemType === 'drawer' && drawerModel) {
         modelToAdd = drawerModel.clone();
-        console.log('Drawer model cloned');
     } else if (itemType === 'lamp' && lampModel) {
-        modelToAdd = lampModel.clone();
-        console.log('Lamp model cloned');
+            // Create a group to hold both the model and the light
+            const lampGroup = new THREE.Group();
+            
+            // Clone the lamp model
+            modelToAdd = lampModel.clone();
+            modelToAdd.castShadow = true;
+            modelToAdd.receiveShadow = true;
+            
+            // Create point light
+            const pointLight = new THREE.PointLight(0xd47a22, 1, 10);
+            pointLight.position.set(0, 9, 0);
+            pointLight.castShadow = true;
+            
+            // Add both to the group
+            lampGroup.add(modelToAdd);
+            lampGroup.add(pointLight);
+            
+            // Store the light reference in the group's userData
+            lampGroup.userData.pointLight = pointLight;
+            lampGroup.userData.type = 'lamp';
+            
+            modelToAdd = lampGroup;
     } else if (itemType === 'shelf' && shelfModel) {
         modelToAdd = shelfModel.clone();
-        console.log('Shelf model cloned');
     } else if (itemType === 'trashcan' && trashcanModel) {
         modelToAdd = trashcanModel.clone();
-        console.log('Trashcan model cloned');
-    } else {
-        console.error(`Model not available for type: ${itemType}. Available models:`, {
-            singleBlockModel: !!singleBlockModel,
-            longBlockModel: !!longBlockModel,
-            bedModel: !!bedModel,
-            chairModel: !!chairModel,
-            deskModel: !!deskModel,
-            drawerModel: !!drawerModel,
-            lampModel: !!lampModel,
-            shelfModel: !!shelfModel,
-            trashcanModel: !!trashcanModel
-        });
-        return;
+    } else if (itemType === 'airconditioner' && airConditionerModel) {
+        modelToAdd = airConditionerModel.clone();
+    } else if (itemType === 'board' && boardModel) {
+        modelToAdd = boardModel.clone();
+    } else if (itemType === 'clock' && clockModel) {
+        modelToAdd = clockModel.clone();
+    } else if (itemType === 'closet' && closetModel) {
+        modelToAdd = closetModel.clone();
+    } else if (itemType === 'closet2' && closet2Model) {
+        modelToAdd = closet2Model.clone();
+    } else if (itemType === 'closet3' && closet3Model) {
+        modelToAdd = closet3Model.clone();
+    } else if (itemType === 'door' && doorModel) {
+        modelToAdd = doorModel.clone();
+    } else if (itemType === 'door2' && door2Model) {
+        modelToAdd = door2Model.clone();
+    } else if (itemType === 'frame' && frameModel) {
+        modelToAdd = frameModel.clone();
+    } else if (itemType === 'frame2' && frame2Model) {
+        modelToAdd = frame2Model.clone();
+    } else if (itemType === 'frame3' && frame3Model) {
+        modelToAdd = frame3Model.clone();
+    } else if (itemType === 'poster' && posterModel) {
+        modelToAdd = posterModel.clone();
+    } else if (itemType === 'poster2' && poster2Model) {
+        modelToAdd = poster2Model.clone();
+    } else if (itemType === 'poster3' && poster3Model) {
+        modelToAdd = poster3Model.clone();
+    } else if (itemType === 'rack' && rackModel) {
+        modelToAdd = rackModel.clone();
+    } else if (itemType === 'rack2' && rack2Model) {
+        modelToAdd = rack2Model.clone();
+    } else if (itemType === 'sofa' && sofaModel) {
+        modelToAdd = sofaModel.clone();
+    } else if (itemType === 'sofa2' && sofa2Model) {
+        modelToAdd = sofa2Model.clone();
+    } else if (itemType === 'table' && tableModel) {
+        modelToAdd = tableModel.clone();
+    } else if (itemType === 'table2' && table2Model) {
+        modelToAdd = table2Model.clone();
+    } else if (itemType === 'tv' && tvModel) {
+        modelToAdd = tvModel.clone();
     }
     
     if (!modelToAdd) {
@@ -1070,11 +1156,10 @@ function addObjectToScene(itemType, mouseX, mouseY) {
                                     const clonedMat = mat.clone();
                                     clonedMat.transparent = false;
                                     clonedMat.opacity = 1.0;
-                                    clonedMat.visible = true;
                                     return clonedMat;
                                 } else {
                                     // Create a fallback material if cloning fails
-                                    const fallbackMat = new THREE.MeshLambertMaterial({
+                                    const fallbackMat = new THREE.MeshBasicMaterial({
                                         color: 0x8e44ad,
                                         transparent: false,
                                         opacity: 1.0
@@ -1088,10 +1173,9 @@ function addObjectToScene(itemType, mouseX, mouseY) {
                                 child.material = child.material.clone();
                                 child.material.transparent = false;
                                 child.material.opacity = 1.0;
-                                child.material.visible = true;
                             } else {
                                 // Create a fallback material if cloning fails
-                                child.material = new THREE.MeshLambertMaterial({
+                                child.material = new THREE.MeshBasicMaterial({
                                     color: 0x8e44ad,
                                     transparent: false,
                                     opacity: 1.0
@@ -1101,7 +1185,7 @@ function addObjectToScene(itemType, mouseX, mouseY) {
                     } catch (error) {
                         console.warn('Failed to clone material for placed object, using fallback:', error);
                         // Create a fallback material
-                        child.material = new THREE.MeshLambertMaterial({
+                        child.material = new THREE.MeshBasicMaterial({
                             color: 0x8e44ad,
                             transparent: false,
                             opacity: 1.0
@@ -1146,19 +1230,41 @@ function addObjectToScene(itemType, mouseX, mouseY) {
             if (itemType === 'single-block' || itemType === 'long-block') {
                 objectScale = BLOCK_SCALE;
             } else if (itemType === 'bed') {
-                objectScale = 0.07;  // Reduced from 0.08 - tiny bit smaller
+                objectScale = 0.07;
             } else if (itemType === 'chair') {
-                objectScale = 0.06;  // Updated to match user's change
+                objectScale = 0.06;
             } else if (itemType === 'desk') {
-                objectScale = 0.06;  // Updated to match user's change
+                objectScale = 0.06;
             } else if (itemType === 'drawer') {
-                objectScale = 0.06;  // Keep same
+                objectScale = 0.06;
             } else if (itemType === 'shelf') {
-                objectScale = 0.08;  // Keep same
+                objectScale = 0.08;
             } else if (itemType === 'lamp') {
-                objectScale = 0.08;  // Keep same
+                objectScale = 0.08;
             } else if (itemType === 'trashcan') {
-                objectScale = 0.06;  // Keep same
+                objectScale = 0.06;
+            } else if (itemType === 'airconditioner') {
+                objectScale = 0.08;
+            } else if (itemType === 'board') {
+                objectScale = 0.08;
+            } else if (itemType === 'clock') {
+                objectScale = 0.08;
+            } else if (itemType === 'closet' || itemType === 'closet2' || itemType === 'closet3') {
+                objectScale = 0.08;
+            } else if (itemType === 'door' || itemType === 'door2') {
+                objectScale = 0.08;
+            } else if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3') {
+                objectScale = 0.08;
+            } else if (itemType === 'poster' || itemType === 'poster2' || itemType === 'poster3') {
+                objectScale = 0.08;
+            } else if (itemType === 'rack' || itemType === 'rack2') {
+                objectScale = 0.08;
+            } else if (itemType === 'sofa' || itemType === 'sofa2') {
+                objectScale = 0.06;
+            } else if (itemType === 'table' || itemType === 'table2') {
+                objectScale = 0.08;
+            } else if (itemType === 'tv') {
+                objectScale = 0.08;
             } else {
                 objectScale = BLOCK_SCALE; // Default fallback
             }
@@ -1229,6 +1335,16 @@ function onMouseClick(event) {
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     
     raycaster.setFromCamera(mouse, camera);
+    
+    // Check for wall box clicks first
+    const wallBoxIntersects = raycaster.intersectObjects(wallBoxes);
+    if (wallBoxIntersects.length > 0) {
+        const wallBox = wallBoxIntersects[0].object;
+        moveCameraToWall(wallBox);  // 이 부분이 wall view로 이동하는 함수입니다.
+        return;
+    }
+    
+    // If not clicking a wall box, proceed with object selection
     const intersects = raycaster.intersectObjects(placedObjects, true);
     
     if (intersects.length > 0) {
@@ -1260,7 +1376,7 @@ function selectObject(object) {
     
     const box = new THREE.Box3().setFromObject(object);
     const size = box.getSize(new THREE.Vector3());
-    const geometry = new THREE.BoxGeometry(size.x * 1.2, size.y * 1.2, size.z * 1.2);
+    const geometry = new THREE.BoxGeometry(size.x * 1.1, size.y * 1.1, size.z * 1.1);
     const material = new THREE.MeshBasicMaterial({
         color: 0x3498db,
         wireframe: true,
@@ -1283,7 +1399,7 @@ function animateSelectionBox(selectionBox) {
         if (scene.getObjectByName('selectionBox') === selectionBox) {
             const time = performance.now() * 0.003;
             selectionBox.position.y = startY + Math.sin(time) * 0.1;
-            selectionBox.rotation.y += 0.02;
+            //selectionBox.rotation.y += 0.02;
             requestAnimationFrame(animate);
         }
     }
@@ -1387,10 +1503,6 @@ function clearRoom() {
     }, 200);
 }
 
-function resetCamera() {
-    springBackCamera();
-}
-
 // Debug function to inspect placed objects
 function debugPlacedObjects() {
     console.log('=== DEBUGGING PLACED OBJECTS ===');
@@ -1460,15 +1572,7 @@ function rotateSelectedObject() {
     console.log('Current rotation:', selectedObject.rotation.y, 'radians, degrees:', (selectedObject.rotation.y * 180 / Math.PI));
     console.log('Current position:', selectedObject.position);
     
-    if (objType === 'single-block' || objType === 'chair' || objType === 'lamp' || objType === 'trashcan') {
-        // Single blocks and 1x1 furniture just rotate in place
-        selectedObject.rotation.y += Math.PI / 2;
-        flashSelectionBox(true);
-        console.log(`${objType} rotated`);
-        return;
-    }
-    
-    if (objType === 'long-block' || objType === 'desk' || objType === 'drawer' || objType === 'shelf' || objType === 'bed') {
+    if (objType === 'bed') {
         const currentRotation = selectedObject.rotation.y;
         const newRotation = currentRotation + Math.PI / 2;
         
@@ -1478,9 +1582,6 @@ function rotateSelectedObject() {
         
         const currentIsHorizontal = Math.abs(Math.sin(normalizedCurrent)) > 0.9;
         const newIsHorizontal = Math.abs(Math.sin(normalizedNew)) > 0.9;
-        
-        console.log('Current is horizontal:', currentIsHorizontal);
-        console.log('New will be horizontal:', newIsHorizontal);
         
         const currentPos = selectedObject.position;
         let newX = currentPos.x;
@@ -1544,6 +1645,7 @@ function rotateSelectedObject() {
         
         // Perform the rotation
         selectedObject.rotation.y = newRotation;
+        selectionBox.rotation.y = selectedObject.rotation.y;
         
         // Show ground highlight with correct orientation
         if (groundHighlight) {
@@ -1565,6 +1667,28 @@ function rotateSelectedObject() {
         flashSelectionBox(true);
         console.log(`${objType} rotated to`, (newRotation * 180 / Math.PI) % 360, 'degrees at position', {x: newX, z: newZ});
     }
+    if (objType === 'desk' || objType === 'tv') {
+        selectedObject.rotation.y += Math.PI / 2;
+        const oldPosition = selectedObject.position.clone();
+        const rot = selectedObject.rotation.y % (2 * Math.PI);
+        if((rot > 1.5 && rot < 1.6) || (rot > 4.7 && rot < 4.8)) {
+            if(selectedObject.position.z < -3.3) 
+                selectedObject.position.set(oldPosition.x, oldPosition.y, -2.5);
+        }
+        else {
+            if(selectedObject.position.x < -3.3)
+                selectedObject.position.set(-2.5, oldPosition.y, oldPosition.z);
+        }
+        flashSelectionBox(true);
+    }
+    else {
+        // Single blocks and 1x1 furniture just rotate in place
+        selectedObject.rotation.y += Math.PI / 2;
+        flashSelectionBox(true);
+        console.log(`${objType} rotated`);
+        return;
+    }
+
     
     console.log('=== ROTATION COMPLETE ===');
 }
@@ -1609,7 +1733,7 @@ function enterMoveMode() {
                             return clonedMat;
                         } else {
                             // Create a fallback material if cloning fails
-                            const fallbackMat = new THREE.MeshLambertMaterial({
+                            const fallbackMat = new THREE.MeshBasicMaterial({
                                 color: 0x3498db,
                                 transparent: true,
                                 opacity: 0.6
@@ -1625,7 +1749,7 @@ function enterMoveMode() {
                         child.material.opacity = 0.6;
                     } else {
                         // Create a fallback material if cloning fails
-                        child.material = new THREE.MeshLambertMaterial({
+                        child.material = new THREE.MeshBasicMaterial({
                             color: 0x3498db,
                             transparent: true,
                             opacity: 0.6
@@ -1635,7 +1759,7 @@ function enterMoveMode() {
             } catch (error) {
                 console.warn('Failed to clone material for move preview, using fallback:', error);
                 // Create a fallback material
-                child.material = new THREE.MeshLambertMaterial({
+                child.material = new THREE.MeshBasicMaterial({
                     color: 0x3498db,
                     transparent: true,
                     opacity: 0.6
@@ -1788,5 +1912,137 @@ function updateGroundHighlightSize(width, depth) {
     
     console.log(`Ground highlight updated to ${width}x${depth}`);
 }
+
+function createWallClickBoxes() {
+    // Create invisible click boxes for walls
+    const boxGeometry = new THREE.BoxGeometry(8, 6, 0.1); // Width: 8, Height: 6, Depth: 0.1
+    const boxMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x000000, 
+        transparent: true, 
+        opacity: 0.0 
+    });
+
+    // Wall 1 (X-axis wall)
+    const wall1Box = new THREE.Mesh(boxGeometry, boxMaterial);
+    wall1Box.position.set(-4, 3, 0); // Center of the wall
+    wall1Box.rotation.y = Math.PI / 2; // Rotate to face Z-axis.
+    wall1Box.userData = {
+        wallName: 'wall1',
+        cameraPosition: new THREE.Vector3(0, 3, 0), // Position camera outside the wall
+        cameraTarget: new THREE.Vector3(-4, 3, 0)    // Look at the center of the wall
+    };
+    scene.add(wall1Box);
+    wallBoxes.push(wall1Box);
+
+    // Wall 2 (Z-axis wall)
+    const wall2Box = new THREE.Mesh(boxGeometry, boxMaterial);
+    wall2Box.position.set(0, 3, -4); // Center of the wall
+    wall2Box.userData = {
+        wallName: 'wall2',
+        cameraPosition: new THREE.Vector3(0, 3, 0), // Position camera outside the wall
+        cameraTarget: new THREE.Vector3(0, 3, -4)    // Look at the center of the wall
+    };
+    scene.add(wall2Box);
+    wallBoxes.push(wall2Box);
+}
+
+function moveCameraToWall(wallBox) {
+    if (isWallView) return; // Prevent multiple wall views
+    if (isEditMode) return;
+     
+    isWallView = true;
+    
+    // Store current camera state
+    originalFOV = camera.fov; // Store original FOV
+    
+    // Get camera position and target from wall box userData
+    const newPosition = wallBox.userData.cameraPosition;
+    const newTarget = wallBox.userData.cameraTarget;
+    
+    // Disable OrbitControls
+    controls.enabled = false;
+    
+    // Switch to wall decoration items
+    document.getElementById('furniture-items').parentElement.style.display = 'none';
+    document.getElementById('wall-items').parentElement.style.display = 'block';
+    document.getElementById('grid-toggle').style.display = 'none';
+    
+    // Animate camera movement and FOV change
+    const duration = 1000; // 1 second
+    const startTime = Date.now();
+    const startPosition = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const startFOV = camera.fov;
+    
+    function animateCamera() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Use easeInOutQuad for smooth animation
+        const easeProgress = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+        
+        camera.position.lerpVectors(startPosition, newPosition, easeProgress);
+        controls.target.lerpVectors(startTarget, newTarget, easeProgress);
+        
+        // Smoothly interpolate FOV
+        camera.fov = startFOV + (WALL_VIEW_FOV - startFOV) * easeProgress;
+        camera.updateProjectionMatrix();
+        
+        if (progress < 1) {
+            requestAnimationFrame(animateCamera);
+        }
+    }
+    
+    animateCamera();
+}
+
+function resetCamera() {
+    if (!isWallView) return;
+    
+    isWallView = false;
+    
+    // Switch back to furniture items
+    document.getElementById('furniture-items').parentElement.style.display = 'block';
+    document.getElementById('wall-items').parentElement.style.display = 'none';
+    document.getElementById('grid-toggle').style.display = 'block';
+    
+    // Animate camera back to original position and FOV
+    const duration = 1000; // 1 second
+    const startTime = Date.now();
+    const startPosition = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const startFOV = camera.fov;
+    
+    function animateCamera() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Use easeInOutQuad for smooth animation
+        const easeProgress = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+        
+        camera.position.lerpVectors(startPosition, originalCameraPosition, easeProgress);
+        controls.target.lerpVectors(startTarget, originalCameraTarget, easeProgress);
+        
+        // Smoothly interpolate FOV back to original
+        camera.fov = startFOV + (originalFOV - startFOV) * easeProgress;
+        camera.updateProjectionMatrix();
+        
+        if (progress < 1) {
+            requestAnimationFrame(animateCamera);
+        } else {
+            // Re-enable OrbitControls after animation completes
+            controls.enabled = true;
+        }
+    }
+    
+    animateCamera();
+}
+
+// Add keyboard event listener for ESC key
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        resetCamera();
+    }
+});
 
 window.addEventListener('DOMContentLoaded', init); 
