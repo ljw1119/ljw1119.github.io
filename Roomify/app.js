@@ -1,6 +1,6 @@
 // Global variables
 let scene, camera, renderer, controls;
-let room, singleBlockModel, longBlockModel;
+let room;
 // New furniture models
 let bedModel, chairModel, deskModel, drawerModel, lampModel, shelfModel, trashcanModel;
 // Additional furniture models
@@ -70,7 +70,6 @@ function init() {
     originalCameraTarget = new THREE.Vector3(0, 1, 0);
 
     camera.position.set(originalCameraPosition.x,originalCameraPosition.y, originalCameraPosition.z);
-    camera.lookAt(originalCameraTarget.x, originalCameraTarget.y, originalCameraTarget.z);
 
     // Create renderer - now full screen
     const canvas = document.getElementById('three-canvas');
@@ -94,6 +93,7 @@ function init() {
     controls.minPolarAngle = deg * 0;
     controls.maxAzimuthAngle = deg * 90; 
     controls.minAzimuthAngle = deg * 0;
+    controls.target.set(originalCameraTarget.x, originalCameraTarget.y, originalCameraTarget.z);
     
     // Custom spring-back behavior
     controls.addEventListener('start', onControlsStart);
@@ -390,8 +390,7 @@ function snapToGrid(worldX, worldZ, itemType = 'single-block', rotationY = 0) {
         
     if (itemType === 'desk' || itemType === 'tv') {
         // 1x3 or 3x1 objects (desk) depend on rotation
-        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
+        const isHorizontal = Math.abs(Math.sin(rotationY)) > 0.9;
         
         if (isHorizontal) {
             gridX = Math.round(worldX) + 0.5;
@@ -427,8 +426,7 @@ function snapToGrid(worldX, worldZ, itemType = 'single-block', rotationY = 0) {
         }
     } 
     else if (itemType === 'bed') {
-        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
+        const isHorizontal = Math.abs(Math.sin(rotationY)) > 0.9;
         if (isHorizontal) {
             gridX = Math.round(worldX);
             gridZ = Math.floor(worldZ);
@@ -457,13 +455,7 @@ function snapToGrid(worldX, worldZ, itemType = 'single-block', rotationY = 0) {
 
 // Helper function to get object dimensions based on type and current rotation
 function getObjectDimensions(type, rotationY = 0) {
-    if (type === 'single-block') {
-        return { width: 1, depth: 1 };
-    } else if (type === 'long-block') {
-        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
-        return isHorizontal ? { width: 2, depth: 1 } : { width: 1, depth: 2 };
-    } else if (type === 'bed') {
+    if (type === 'bed') {
         const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
         const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
         return isHorizontal ? { width: 2, depth: 4 } : { width: 4, depth: 2 };
@@ -492,7 +484,6 @@ function getObjectDimensions(type, rotationY = 0) {
     else {
         return { width: 1, depth: 1 };
     }
-    return { width: 1, depth: 1 }; // Default
 }
 
 // Updated collision detection function that accounts for rotation
@@ -619,114 +610,6 @@ function loadModels() {
         console.log(`Room loading: ${percent}%`);
     }, (error) => {
         console.error('Failed to load room FBX:', error);
-        createFallbackRoom();
-    });
-    
-    // Load single block model - use full relative path
-    loader.load('./Resources/Unit_block.fbx', (fbx) => {
-        console.log('Single block FBX loaded, processing...');
-        
-        // Scale the original model
-        fbx.scale.setScalar(BLOCK_SCALE);
-        
-        // Create a wrapper group to properly center the model
-        const wrapper = new THREE.Group();
-        
-        // Calculate bounding box of the scaled model
-        const box = new THREE.Box3().setFromObject(fbx);
-        const center = box.getCenter(new THREE.Vector3());
-        
-        // Move the FBX model so its center aligns with the wrapper's origin
-        fbx.position.set(-center.x, -center.y, -center.z);
-        
-        // Add the centered FBX to the wrapper
-        wrapper.add(fbx);
-        
-        // Process materials
-        fbx.traverse((child) => {
-            if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-                
-                console.log('Single block mesh:', child.name, 'Material:', child.material?.name || 'No material');
-                console.log('Material type:', child.material?.type);
-                console.log('Material color:', child.material?.color);
-                
-                if (child.material) {
-                    child.material.needsUpdate = true;
-                    
-                    if (child.material.color) {
-                        console.log('Original color:', child.material.color.getHexString());
-                    }
-                }
-            }
-        });
-        
-        // Use the wrapper as the model
-        singleBlockModel = wrapper;
-        
-        createModelPreview(singleBlockModel, 'single-block-preview');
-        console.log('Single block model ready');
-    }, (progress) => {
-        const percent = (progress.loaded / progress.total * 100).toFixed(1);
-        console.log(`Single block loading: ${percent}%`);
-    }, (error) => {
-        console.error('Failed to load single block FBX:', error);
-        createFallbackBlock('single');
-    });
-    
-    // Load long block model - use full relative path
-    loader.load('./Resources/Unit_block_long.fbx', (fbx) => {
-        console.log('Long block FBX loaded, processing...');
-        
-        // Scale the original model
-        fbx.scale.setScalar(BLOCK_SCALE);
-        
-        // Create a wrapper group to properly center the model
-        const wrapper = new THREE.Group();
-        
-        // Calculate bounding box of the scaled model
-        const box = new THREE.Box3().setFromObject(fbx);
-        const center = box.getCenter(new THREE.Vector3());
-        
-        // Move the FBX model so its center aligns with the wrapper's origin
-        fbx.position.set(-center.x, -center.y, -center.z);
-        
-        // Add the centered FBX to the wrapper
-        wrapper.add(fbx);
-        
-        // Rotate the wrapper 90 degrees around Y axis for long blocks
-        wrapper.rotation.y = Math.PI / 2; // 90 degrees in radians
-        
-        // Process materials
-        fbx.traverse((child) => {
-            if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-                
-                console.log('Long block mesh:', child.name, 'Material:', child.material?.name || 'No material');
-                
-                if (child.material) {
-                    child.material.needsUpdate = true;
-                    
-                    if (child.material.color) {
-                        console.log('Original color:', child.material.color.getHexString());
-                    }
-                }
-            }
-        });
-        
-        // Use the wrapper as the model
-        longBlockModel = wrapper;
-        
-        createModelPreview(longBlockModel, 'long-block-preview');
-        console.log('Long block model ready');
-    }, (progress) => {
-        const percent = (progress.loaded / progress.total * 100).toFixed(1);
-        console.log(`Long block loading: ${percent}%`);
-    }, (error) => {
-        console.error('Failed to load long block FBX:', error);
-        createFallbackBlock('long');
     });
 
     // Load all furniture models
@@ -882,51 +765,6 @@ function createModelPreview(model, containerId) {
     animatePreview();
 }
 
-function createFallbackRoom() {
-    console.log('Creating fallback room geometry');
-    const group = new THREE.Group();
-    
-    const wallGeometry = new THREE.BoxGeometry(ROOM_SIZE, 4, 0.2);
-    const wallMaterial = new THREE.MeshBasicMaterial({ color: 0x5d6d7e });
-    
-    const backWall = new THREE.Mesh(wallGeometry, wallMaterial);
-    backWall.position.set(0, 2, -ROOM_SIZE/2);
-    backWall.castShadow = true;
-    backWall.receiveShadow = true;
-    group.add(backWall);
-    
-    const leftWallGeometry = new THREE.BoxGeometry(0.2, 4, ROOM_SIZE);
-    const leftWall = new THREE.Mesh(leftWallGeometry, wallMaterial);
-    leftWall.position.set(-ROOM_SIZE/2, 2, 0);
-    leftWall.castShadow = true;
-    leftWall.receiveShadow = true;
-    group.add(leftWall);
-    
-    room = group;
-    scene.add(room);
-}
-
-function createFallbackBlock(type) {
-    console.log(`Creating fallback ${type} block`);
-    const width = type === 'long' ? 2 : 1;
-    const geometry = new THREE.BoxGeometry(width, BLOCK_HEIGHT, 1);
-    const material = new THREE.MeshBasicMaterial({ 
-        color: type === 'long' ? 0x2980b9 : 0x3498db  // Blue colors instead of orange
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    
-    if (type === 'long') {
-        // Rotate long block 90 degrees to match the FBX version
-        longBlockModel = mesh;
-        createModelPreview(mesh, 'long-block-preview');
-    } else {
-        singleBlockModel = mesh;
-        createModelPreview(mesh, 'single-block-preview');
-    }
-}
-
 function onControlsStart() {
     isRotating = true;
 }
@@ -1046,11 +884,7 @@ function startDragPreview(itemType) {
     isDragging = true;
     
     let modelToPreview;
-    if (itemType === 'single-block' && singleBlockModel) {
-        modelToPreview = singleBlockModel.clone();
-    } else if (itemType === 'long-block' && longBlockModel) {
-        modelToPreview = longBlockModel.clone();
-    } else if (itemType === 'bed' && bedModel) {
+    if (itemType === 'bed' && bedModel) {
         modelToPreview = bedModel.clone();
     } else if (itemType === 'chair' && chairModel) {
         modelToPreview = chairModel.clone();
@@ -1111,9 +945,7 @@ function startDragPreview(itemType) {
     if (modelToPreview) {
         // Determine the appropriate scale based on object type
         let objectScale;
-        if (itemType === 'single-block' || itemType === 'long-block') {
-            objectScale = BLOCK_SCALE;
-        } else if (itemType === 'bed') {
+        if (itemType === 'bed') {
             objectScale = 0.07;
         } else if (itemType === 'chair') {
             objectScale = 0.06;
@@ -1373,11 +1205,7 @@ function addObjectToScene(itemType, mouseX, mouseY) {
     console.log(`Attempting to add object of type: ${itemType}`);
     let modelToAdd;
     
-    if (itemType === 'single-block' && singleBlockModel) {
-        modelToAdd = singleBlockModel.clone();
-    } else if (itemType === 'long-block' && longBlockModel) {
-        modelToAdd = longBlockModel.clone();
-    } else if (itemType === 'bed' && bedModel) {
+    if (itemType === 'bed' && bedModel) {
         modelToAdd = bedModel.clone();
     } else if (itemType === 'chair' && chairModel) {
         modelToAdd = chairModel.clone();
@@ -2002,56 +1830,6 @@ function clearRoom() {
     }, 200);
 }
 
-// Debug function to inspect placed objects
-function debugPlacedObjects() {
-    console.log('=== DEBUGGING PLACED OBJECTS ===');
-    console.log('Total placed objects:', placedObjects.length);
-    console.log('Scene children count:', scene.children.length);
-    
-    placedObjects.forEach((obj, index) => {
-        console.log(`Object ${index}:`, {
-            type: obj.userData?.type,
-            position: obj.position,
-            scale: obj.scale,
-            visible: obj.visible,
-            inScene: scene.children.includes(obj),
-            boundingBox: new THREE.Box3().setFromObject(obj)
-        });
-    });
-    
-    console.log('Camera position:', camera.position);
-    console.log('Camera looking at:', controls.target);
-}
-
-// Debug function to check model loading status
-function debugModels() {
-    console.log('=== DEBUGGING MODEL LOADING STATUS ===');
-    console.log('Available models:', {
-        singleBlockModel: !!singleBlockModel,
-        longBlockModel: !!longBlockModel,
-        bedModel: !!bedModel,
-        chairModel: !!chairModel,
-        deskModel: !!deskModel,
-        drawerModel: !!drawerModel,
-        lampModel: !!lampModel,
-        shelfModel: !!shelfModel,
-        trashcanModel: !!trashcanModel
-    });
-    
-    console.log('Model details:');
-    if (bedModel) console.log('Bed model:', bedModel);
-    if (chairModel) console.log('Chair model:', chairModel);
-    if (deskModel) console.log('Desk model:', deskModel);
-    if (drawerModel) console.log('Drawer model:', drawerModel);
-    if (lampModel) console.log('Lamp model:', lampModel);
-    if (shelfModel) console.log('Shelf model:', shelfModel);
-    if (trashcanModel) console.log('Trashcan model:', trashcanModel);
-}
-
-// Make debug functions available globally
-window.debugPlacedObjects = debugPlacedObjects;
-window.debugModels = debugModels;
-
 // Fixed rotation function
 function rotateSelectedObject() {
     console.log('=== ROTATION FUNCTION CALLED ===');
@@ -2072,101 +1850,31 @@ function rotateSelectedObject() {
     console.log('Current position:', selectedObject.position);
     
     if (objType === 'bed') {
-        const currentRotation = selectedObject.rotation.y;
-        const newRotation = currentRotation + Math.PI / 2;
+        // Store old position and rotation
+        const oldPosition = selectedObject.position.clone();
+        const oldRotation = selectedObject.rotation.y;
         
-        // Determine current and new orientations based on object type
-        const normalizedCurrent = ((currentRotation % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-        const normalizedNew = ((newRotation % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+        // Rotate 90 degrees
+        selectedObject.rotation.y += Math.PI / 2;
         
-        const currentIsHorizontal = Math.abs(Math.sin(normalizedCurrent)) > 0.9;
-        const newIsHorizontal = Math.abs(Math.sin(normalizedNew)) > 0.9;
+        // Get new rotation normalized to 0-2π
+        const newRotation = selectedObject.rotation.y % (2 * Math.PI);
         
-        const currentPos = selectedObject.position;
-        let newX = currentPos.x;
-        let newZ = currentPos.z;
+        // Calculate new position based on rotation
+        const isHorizontal = Math.abs(Math.sin(newRotation)) > 0.9;
         
-        // Calculate new position if orientation changes
-        if (currentIsHorizontal !== newIsHorizontal) {
-            console.log('Orientation changing - repositioning needed');
-            
-            // Use snapToGrid to get the correct position for the new orientation
-            const gridPos = snapToGrid(currentPos.x, currentPos.z, objType, newRotation);
-            newX = gridPos.x;
-            newZ = gridPos.z;
-            
-            console.log('New position after grid snap:', {x: newX, z: newZ});
-            
-            // Check for collision at new position
-            const objIndex = placedObjects.indexOf(selectedObject);
-            const tempPlacedObjects = placedObjects.slice();
-            tempPlacedObjects.splice(objIndex, 1);
-            
-            // Check collision with new dimensions
-            const newDimensions = getObjectDimensions(objType, newRotation);
-            
-            let hasCollision = false;
-            for (let obj of tempPlacedObjects) {
-                const objDimensions = getObjectDimensions(obj.userData.type, obj.rotation.y);
-                
-                // AABB collision check
-                const newMinX = newX - newDimensions.width / 2;
-                const newMaxX = newX + newDimensions.width / 2;
-                const newMinZ = newZ - newDimensions.depth / 2;
-                const newMaxZ = newZ + newDimensions.depth / 2;
-                
-                const objMinX = obj.position.x - objDimensions.width / 2;
-                const objMaxX = obj.position.x + objDimensions.width / 2;
-                const objMinZ = obj.position.z - objDimensions.depth / 2;
-                const objMaxZ = obj.position.z + objDimensions.depth / 2;
-                
-                if (newMaxX > objMinX && newMinX < objMaxX && newMaxZ > objMinZ && newMinZ < objMaxZ) {
-                    hasCollision = true;
-                    break;
-                }
-            }
-            
-            if (hasCollision) {
-                console.log('Collision detected - cannot rotate');
-                flashSelectionBox(false);
-                return;
-            }
-            
-            // Move the object to new position
-            selectedObject.position.set(newX, selectedObject.position.y, newZ);
-            
-            // Update selection box position
-            const selectionBox = scene.getObjectByName('selectionBox');
-            if (selectionBox) {
-                selectionBox.position.copy(selectedObject.position);
-            }
+        if (isHorizontal) {
+            // Horizontal orientation
+            if (oldPosition.z < -2.9) 
+                selectedObject.position.set(oldPosition.x, oldPosition.y, -2);
+        } else {
+            // Vertical orientation
+            if (oldPosition.x < -2.9) 
+                selectedObject.position.set(-2, oldPosition.y, oldPosition.z);
         }
-        
-        // Perform the rotation
-        selectedObject.rotation.y = newRotation;
-        selectionBox.rotation.y = selectedObject.rotation.y;
-        
-        // Show ground highlight with correct orientation
-        if (groundHighlight) {
-            const newDimensions = getObjectDimensions(objType, newRotation);
-            updateGroundHighlightSize(newDimensions.width, newDimensions.depth);
-            
-            groundHighlight.position.set(newX, 0.02, newZ);
-            groundHighlight.material.color.setHex(0x00ff00);
-            groundHighlight.visible = true;
-            
-            setTimeout(() => {
-                if (groundHighlight) {
-                    groundHighlight.visible = false;
-                    updateGroundHighlightSize(1, 1);
-                }
-            }, 1000);
-        }
-        
         flashSelectionBox(true);
-        console.log(`${objType} rotated to`, (newRotation * 180 / Math.PI) % 360, 'degrees at position', {x: newX, z: newZ});
     }
-    if (objType === 'desk' || objType === 'tv') {
+    else if (objType === 'desk' || objType === 'tv') {
         selectedObject.rotation.y += Math.PI / 2;
         const oldPosition = selectedObject.position.clone();
         const rot = selectedObject.rotation.y % (2 * Math.PI);
@@ -2526,36 +2234,7 @@ function resetCamera() {
     document.getElementById('wall-items').parentElement.style.display = 'none';
     document.getElementById('grid-toggle').style.display = 'block';
     
-    // Animate camera back to original position and FOV
-    const duration = 1000; // 1 second
-    const startTime = Date.now();
-    const startPosition = camera.position.clone();
-    const startTarget = controls.target.clone();
-    const startFOV = camera.fov;
-    
-    function animateCamera() {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Use easeInOutQuad for smooth animation
-        const easeProgress = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-        
-        camera.position.lerpVectors(startPosition, originalCameraPosition, easeProgress);
-        controls.target.lerpVectors(startTarget, originalCameraTarget, easeProgress);
-        
-        // Smoothly interpolate FOV back to original
-        camera.fov = startFOV + (originalFOV - startFOV) * easeProgress;
-        camera.updateProjectionMatrix();
-        
-        if (progress < 1) {
-            requestAnimationFrame(animateCamera);
-        } else {
-            // Re-enable OrbitControls after animation completes
-            controls.enabled = true;
-        }
-    }
-    
-    animateCamera();
+   springBackCamera()
 }
 
 // Add keyboard event listener for ESC key
