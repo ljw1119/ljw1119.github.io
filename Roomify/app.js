@@ -50,9 +50,12 @@ const WALL_VIEW_FOV = 55; // Narrower FOV for wall view
 
 // Add wall grid variables
 let wallGrids = [];
-const WALL_GRID_SIZE = 8; // 8 columns
-const WALL_GRID_HEIGHT = 6; // 6 rows
+let wallHighlight = null;
+let placedWallObjects = [];
+const WALL_GRID_WIDTH = 8; // 8 columns across width
+const WALL_GRID_HEIGHT = 4; // 4 rows (top 3/4 of 4-unit wall height)
 const WALL_TILE_SIZE = 1; // 1x1 tile size
+let currentWall = null; // Track which wall we're viewing
 
 // Initialize the application
 function init() {
@@ -111,6 +114,12 @@ function init() {
     // Create floor grid
     createFloorGrid();
     
+    // Create wall highlight
+    createWallHighlight();
+    
+    // Create wall grids
+    createWallGrids();
+    
     // Create wall click boxes
     createWallClickBoxes();
     
@@ -164,6 +173,45 @@ function createGroundHighlight() {
     scene.add(groundHighlight);
 }
 
+function createWallHighlight() {
+    // Create wall highlight for wall object placement
+    const geometry = new THREE.PlaneGeometry(1, 1);
+    const material = new THREE.MeshBasicMaterial({
+        color: 0x00ff00,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide
+    });
+    wallHighlight = new THREE.Mesh(geometry, material);
+    wallHighlight.visible = false;
+    scene.add(wallHighlight);
+}
+
+function updateWallHighlightSize(itemType) {
+    if (!wallHighlight) return;
+    
+    // Dispose old geometry to prevent memory leaks
+    if (wallHighlight.geometry) {
+        wallHighlight.geometry.dispose();
+    }
+    
+    // Create new geometry based on item type
+    let width = 1, height = 1;
+    if (itemType === 'airconditioner') {
+        width = 2; // 2 tiles wide
+        height = 1; // 1 tile tall
+    } else if (itemType === 'board') {
+        width = 2; // 2 tiles wide
+        height = 2; // 2 tiles tall
+    } else {
+        width = 1; // Default 1x1
+        height = 1;
+    }
+    
+    const geometry = new THREE.PlaneGeometry(width, height);
+    wallHighlight.geometry = geometry;
+}
+
 function createFloorGrid() {
     // Create floor - make it invisible but ensure it's raycast-able
     const floorGeometry = new THREE.PlaneGeometry(ROOM_SIZE, ROOM_SIZE);
@@ -188,6 +236,75 @@ function createFloorGrid() {
     griddisplay = true; // Set grid display to true
 }
 
+function createWallGrids() {
+    // Create visual grids for both walls (8x4 grid system, positioned lower)
+    const gridWidth = WALL_GRID_WIDTH * WALL_TILE_SIZE; // 8 units wide
+    const gridHeight = WALL_GRID_HEIGHT * WALL_TILE_SIZE; // 4 units high
+    
+    // Wall 1 (X-axis wall) - create individual grid squares without internal lines
+    const wall1GridGroup = new THREE.Group();
+    wall1GridGroup.name = 'wall1Grid';
+    wall1GridGroup.visible = false;
+    
+    // Create individual square outlines for wall 1
+    for (let i = 0; i < WALL_GRID_WIDTH; i++) {
+        for (let j = 0; j < WALL_GRID_HEIGHT; j++) {
+            const squareGeometry = new THREE.PlaneGeometry(WALL_TILE_SIZE, WALL_TILE_SIZE);
+            const edges = new THREE.EdgesGeometry(squareGeometry);
+            const lineMaterial = new THREE.LineBasicMaterial({ 
+                color: 0x2c3e50, 
+                transparent: true, 
+                opacity: 0.5 
+            });
+            const square = new THREE.LineSegments(edges, lineMaterial);
+            
+            // Position each square
+            const x = (i - WALL_GRID_WIDTH/2 + 0.5) * WALL_TILE_SIZE;
+            const y = (j - WALL_GRID_HEIGHT/2 + 0.5) * WALL_TILE_SIZE;
+            square.position.set(x, y, 0);
+            wall1GridGroup.add(square);
+        }
+    }
+    
+    wall1GridGroup.position.set(-3.9, 4, 0); // x=-3.9 (in front of wall), y=4 (lower position), z=0 (centered)
+    wall1GridGroup.rotation.y = Math.PI / 2; // Rotate 90 degrees to face the correct direction
+    scene.add(wall1GridGroup);
+    
+    // Wall 2 (Z-axis wall) - create individual grid squares without internal lines
+    const wall2GridGroup = new THREE.Group();
+    wall2GridGroup.name = 'wall2Grid';
+    wall2GridGroup.visible = false;
+    
+    // Create individual square outlines for wall 2
+    for (let i = 0; i < WALL_GRID_WIDTH; i++) {
+        for (let j = 0; j < WALL_GRID_HEIGHT; j++) {
+            const squareGeometry = new THREE.PlaneGeometry(WALL_TILE_SIZE, WALL_TILE_SIZE);
+            const edges = new THREE.EdgesGeometry(squareGeometry);
+            const lineMaterial = new THREE.LineBasicMaterial({ 
+                color: 0x2c3e50, 
+                transparent: true, 
+                opacity: 0.5 
+            });
+            const square = new THREE.LineSegments(edges, lineMaterial);
+            
+            // Position each square
+            const x = (i - WALL_GRID_WIDTH/2 + 0.5) * WALL_TILE_SIZE;
+            const y = (j - WALL_GRID_HEIGHT/2 + 0.5) * WALL_TILE_SIZE;
+            square.position.set(x, y, 0);
+            wall2GridGroup.add(square);
+        }
+    }
+    
+    wall2GridGroup.position.set(0, 4, -3.9); // x=0 (centered), y=4 (lower position), z=-3.9 (in front of wall)
+    scene.add(wall2GridGroup);
+    
+    // Store wall grids for easy access
+    wallGrids = [
+        { wall: 'wall1', grid: wall1GridGroup },
+        { wall: 'wall2', grid: wall2GridGroup }
+    ];
+}
+
 function gridOnOff() {
     if (griddisplay) {
         scene.remove(scene.getObjectByName('gridHelper'));
@@ -197,6 +314,71 @@ function gridOnOff() {
     else {
         createFloorGrid();
     }
+}
+
+// Wall grid snapping function
+function snapToWallGrid(worldX, worldY, wallName, itemType = 'frame') {
+    let gridX, gridY;
+    
+    if (wallName === 'wall1') {
+        // Wall 1 has 8x4 grid: X from -3.5 to 3.5 (centers), Y from 2.5 to 5.5 (centers)
+        
+        if (itemType === 'airconditioner') {
+            // AC is 1x2 (2 tiles horizontally) - snap to center of 2-tile span
+            const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
+            const snapY = Math.round(worldY - 0.5) + 0.5; // Snap to .5 positions for height
+            
+            // Constrain to valid positions (accounting for 2-tile width)
+            gridX = Math.max(-2.5, Math.min(2.5, snapX)); // -2.5 to 2.5 (centers of 2-wide spans)
+            gridY = Math.max(2.5, Math.min(5.5, snapY));
+        } else if (itemType === 'board') {
+            // Board is 2x2 - snap to center of 2x2 area
+            const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
+            const snapY = Math.round(worldY); // Snap to integer positions for 2-tall objects
+            
+            // Constrain to valid positions (accounting for 2x2 size)
+            gridX = Math.max(-2.5, Math.min(2.5, snapX)); // -2.5 to 2.5 (centers of 2-wide spans)
+            gridY = Math.max(3, Math.min(5, snapY)); // 3 to 5 (centers of 2-tall spans)
+        } else {
+            // Default 1x1 objects - snap to grid square centers
+            const snapX = Math.round(worldX - 0.5) + 0.5; // Snap to .5 positions
+            const snapY = Math.round(worldY - 0.5) + 0.5; // Snap to .5 positions
+            
+            // Constrain to valid grid square centers (8 columns x 4 rows)
+            gridX = Math.max(-3.5, Math.min(3.5, snapX));
+            gridY = Math.max(2.5, Math.min(5.5, snapY));
+        }
+    } else if (wallName === 'wall2') {
+        // Wall 2 has 8x4 grid: X from -3.5 to 3.5 (centers), Y from 2.5 to 5.5 (centers)
+        
+        if (itemType === 'airconditioner') {
+            // AC is 1x2 (2 tiles horizontally) - snap to center of 2-tile span
+            const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
+            const snapY = Math.round(worldY - 0.5) + 0.5; // Snap to .5 positions for height
+            
+            // Constrain to valid positions (accounting for 2-tile width)
+            gridX = Math.max(-2.5, Math.min(2.5, snapX)); // -2.5 to 2.5 (centers of 2-wide spans)
+            gridY = Math.max(2.5, Math.min(5.5, snapY));
+        } else if (itemType === 'board') {
+            // Board is 2x2 - snap to center of 2x2 area
+            const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
+            const snapY = Math.round(worldY); // Snap to integer positions for 2-tall objects
+            
+            // Constrain to valid positions (accounting for 2x2 size)
+            gridX = Math.max(-2.5, Math.min(2.5, snapX)); // -2.5 to 2.5 (centers of 2-wide spans)
+            gridY = Math.max(3, Math.min(5, snapY)); // 3 to 5 (centers of 2-tall spans)
+        } else {
+            // Default 1x1 objects - snap to grid square centers
+            const snapX = Math.round(worldX - 0.5) + 0.5; // Snap to .5 positions
+            const snapY = Math.round(worldY - 0.5) + 0.5; // Snap to .5 positions
+            
+            // Constrain to valid grid square centers (8 columns x 4 rows)
+            gridX = Math.max(-3.5, Math.min(3.5, snapX));
+            gridY = Math.max(2.5, Math.min(5.5, snapY));
+        }
+    }
+    
+    return { x: gridX, y: gridY };
 }
 
 // Fixed grid snapping function that handles rotation
@@ -347,6 +529,51 @@ function checkCollision(newX, newZ, newType, newRotation = 0) {
     }
     
     return false; // No collision
+}
+
+function checkWallCollision(newX, newY, wallName, newType) {
+    // Get dimensions for the new object
+    const getWallObjectDimensions = (type) => {
+        if (type === 'airconditioner') {
+            return { width: 2, height: 1 }; // 2 tiles wide, 1 tile tall
+        } else if (type === 'board') {
+            return { width: 2, height: 2 }; // 2 tiles wide, 2 tiles tall
+        } else {
+            return { width: 1, height: 1 }; // Default 1x1
+        }
+    };
+    
+    const newDimensions = getWallObjectDimensions(newType);
+    
+    // Check collision with other wall objects
+    for (let wallObj of placedWallObjects) {
+        if (wallObj.userData.wallName !== wallName) continue;
+        
+        const objX = wallObj.userData.gridX;
+        const objY = wallObj.userData.gridY;
+        const objType = wallObj.userData.type;
+        const objDimensions = getWallObjectDimensions(objType);
+        
+        // Calculate boundaries for both objects
+        const newMinX = newX - newDimensions.width / 2;
+        const newMaxX = newX + newDimensions.width / 2;
+        const newMinY = newY - newDimensions.height / 2;
+        const newMaxY = newY + newDimensions.height / 2;
+        
+        const objMinX = objX - objDimensions.width / 2;
+        const objMaxX = objX + objDimensions.width / 2;
+        const objMinY = objY - objDimensions.height / 2;
+        const objMaxY = objY + objDimensions.height / 2;
+        
+        // Check for overlap
+        const overlapX = newMaxX > objMinX && newMinX < objMaxX;
+        const overlapY = newMaxY > objMinY && newMinY < objMaxY;
+        
+        if (overlapX && overlapY) {
+            return true; // Collision detected
+        }
+    }
+    return false;
 }
 
 function loadModels() {
@@ -805,7 +1032,12 @@ function setupDragAndDrop() {
         const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
         const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         
-        addObjectToScene(itemType, x, y);
+        // Determine if we should add to wall or floor
+        if (isWallView && currentWall) {
+            addWallObjectToScene(itemType, x, y);
+        } else {
+            addObjectToScene(itemType, x, y);
+        }
         endDragPreview();
     });
 }
@@ -896,19 +1128,19 @@ function startDragPreview(itemType) {
         } else if (itemType === 'trashcan') {
             objectScale = 0.06;
         } else if (itemType === 'airconditioner') {
-            objectScale = 0.08;
-        } else if (itemType === 'board') {
-            objectScale = 0.08;
+            objectScale = isWallView ? 0.06 : 0.08;
         } else if (itemType === 'clock') {
-            objectScale = 0.08;
+            objectScale = isWallView ? 0.06 : 0.08;
         } else if (itemType === 'closet' || itemType === 'closet2' || itemType === 'closet3') {
             objectScale = 0.08;
         } else if (itemType === 'door' || itemType === 'door2') {
             objectScale = 0.08;
         } else if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3') {
-            objectScale = 0.08;
+            objectScale = isWallView ? 0.055 : 0.08;
         } else if (itemType === 'poster' || itemType === 'poster2' || itemType === 'poster3') {
-            objectScale = 0.08;
+            objectScale = isWallView ? 0.06 : 0.08;
+        } else if (itemType === 'board') {
+            objectScale = isWallView ? 0.06 : 0.08;
         } else if (itemType === 'rack' || itemType === 'rack2') {
             objectScale = 0.08;
         } else if (itemType === 'sofa' || itemType === 'sofa2') {
@@ -993,44 +1225,126 @@ function updateDragPreview(event) {
     mouse.set(x, y);
     raycaster.setFromCamera(mouse, camera);
     
-    const floorIntersects = raycaster.intersectObjects(scene.children.filter(obj => 
-        obj.name === 'floor' || (obj.geometry && obj.geometry.type === 'PlaneGeometry')
-    ));
-    
-    if (floorIntersects.length > 0) {
-        const intersectPoint = floorIntersects[0].point;
-        const itemType = dragPreviewObject.userData.itemType;
+    if (isWallView && currentWall) {
+        // Wall mode - raycast against wall surfaces
+        const wallIntersects = raycaster.intersectObjects(wallBoxes);
         
-        // Use fixed grid snapping with proper rotation
-        // New long blocks start with π/2 rotation (horizontal)
-        const objectRotation = itemType === 'long-block' ? Math.PI / 2 : 0;
-        const gridPos = snapToGrid(intersectPoint.x, intersectPoint.z, itemType, objectRotation);
-        
-        // Check for collision
-        const hasCollision = checkCollision(gridPos.x, gridPos.z, itemType, objectRotation);
-        
-        // Use the pre-calculated Y offset to avoid jittering
-        const yPosition = dragPreviewObject.userData.yOffset;
-        
-        dragPreviewObject.position.set(gridPos.x, yPosition, gridPos.z);
-        
-        // Update ground highlight size based on item type and rotation
-        const dimensions = getObjectDimensions(itemType, objectRotation);
-        updateGroundHighlightSize(dimensions.width, dimensions.depth);
-        
-        // Change color based on collision status
-        if (hasCollision) {
-            groundHighlight.material.color.setHex(0xff0000); // Red for collision
-            dragPreviewObject.userData.hasCollision = true;
+        if (wallIntersects.length > 0) {
+            const intersectPoint = wallIntersects[0].point;
+            const itemType = dragPreviewObject.userData.itemType;
+            
+            // Convert 3D intersection to wall grid coordinates
+            let wallX, wallY;
+            if (currentWall === 'wall1') {
+                wallX = intersectPoint.z;
+                wallY = intersectPoint.y;
+            } else if (currentWall === 'wall2') {
+                wallX = intersectPoint.x;
+                wallY = intersectPoint.y;
+            }
+            
+            // Snap to wall grid
+            const gridPos = snapToWallGrid(wallX, wallY, currentWall, itemType);
+            
+            // Check for collision
+            const hasCollision = checkWallCollision(gridPos.x, gridPos.y, currentWall, itemType);
+            
+            // Position the preview object on the wall
+            let worldX, worldY, worldZ;
+            if (currentWall === 'wall1') {
+                worldX = -3.92; // Closer to wall, not too far forward
+                worldY = gridPos.y;
+                worldZ = gridPos.x;
+                
+                // Apply correct rotation for preview
+                if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3' || itemType === 'board') {
+                    dragPreviewObject.rotation.set(0, Math.PI, 0);
+                } else {
+                    dragPreviewObject.rotation.y = Math.PI / 2;
+                }
+            } else if (currentWall === 'wall2') {
+                worldX = gridPos.x;
+                worldY = gridPos.y;
+                worldZ = -3.92; // Closer to wall, not too far forward
+                
+                // Apply correct rotation for preview
+                if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3' || itemType === 'board') {
+                    dragPreviewObject.rotation.set(0, Math.PI / 2, 0);
+                } else {
+                    dragPreviewObject.rotation.y = 0;
+                }
+            }
+            
+            dragPreviewObject.position.set(worldX, worldY, worldZ);
+            
+            // Update wall highlight size and color
+            updateWallHighlightSize(itemType);
+            if (hasCollision) {
+                wallHighlight.material.color.setHex(0xff0000); // Red for collision
+                dragPreviewObject.userData.hasCollision = true;
+            } else {
+                wallHighlight.material.color.setHex(0x00ff00); // Green for valid placement
+                dragPreviewObject.userData.hasCollision = false;
+            }
+            
+            // Position wall highlight
+            wallHighlight.position.set(worldX - 0.02, worldY, worldZ);
+            if (currentWall === 'wall1') {
+                wallHighlight.rotation.set(0, Math.PI / 2, 0);
+            } else if (currentWall === 'wall2') {
+                wallHighlight.rotation.set(0, 0, 0);
+            }
+            wallHighlight.visible = true;
+            
+            // Hide ground highlight in wall mode
+            groundHighlight.visible = false;
         } else {
-            groundHighlight.material.color.setHex(0x00ff00); // Green for valid placement
-            dragPreviewObject.userData.hasCollision = false;
+            wallHighlight.visible = false;
         }
-        
-        groundHighlight.position.set(gridPos.x, 0.02, gridPos.z);
-        groundHighlight.visible = true;
     } else {
-        groundHighlight.visible = false;
+        // Floor mode - original functionality
+        const floorIntersects = raycaster.intersectObjects(scene.children.filter(obj => 
+            obj.name === 'floor' || (obj.geometry && obj.geometry.type === 'PlaneGeometry')
+        ));
+        
+        if (floorIntersects.length > 0) {
+            const intersectPoint = floorIntersects[0].point;
+            const itemType = dragPreviewObject.userData.itemType;
+            
+            // Use fixed grid snapping with proper rotation
+            // New long blocks start with π/2 rotation (horizontal)
+            const objectRotation = itemType === 'long-block' ? Math.PI / 2 : 0;
+            const gridPos = snapToGrid(intersectPoint.x, intersectPoint.z, itemType, objectRotation);
+            
+            // Check for collision
+            const hasCollision = checkCollision(gridPos.x, gridPos.z, itemType, objectRotation);
+            
+            // Use the pre-calculated Y offset to avoid jittering
+            const yPosition = dragPreviewObject.userData.yOffset;
+            
+            dragPreviewObject.position.set(gridPos.x, yPosition, gridPos.z);
+            
+            // Update ground highlight size based on item type and rotation
+            const dimensions = getObjectDimensions(itemType, objectRotation);
+            updateGroundHighlightSize(dimensions.width, dimensions.depth);
+            
+            // Change color based on collision status
+            if (hasCollision) {
+                groundHighlight.material.color.setHex(0xff0000); // Red for collision
+                dragPreviewObject.userData.hasCollision = true;
+            } else {
+                groundHighlight.material.color.setHex(0x00ff00); // Green for valid placement
+                dragPreviewObject.userData.hasCollision = false;
+            }
+            
+            groundHighlight.position.set(gridPos.x, 0.02, gridPos.z);
+            groundHighlight.visible = true;
+            
+            // Hide wall highlight in floor mode
+            wallHighlight.visible = false;
+        } else {
+            groundHighlight.visible = false;
+        }
     }
 }
 
@@ -1046,6 +1360,12 @@ function endDragPreview() {
         groundHighlight.visible = false;
         updateGroundHighlightSize(1, 1); // Reset to 1x1
         groundHighlight.material.color.setHex(0x00ff00); // Reset to green
+    }
+    
+    if (wallHighlight) {
+        wallHighlight.visible = false;
+        updateWallHighlightSize('default'); // Reset to 1x1
+        wallHighlight.material.color.setHex(0x00ff00); // Reset to green
     }
 }
 
@@ -1321,6 +1641,170 @@ function animateObjectPlacement(object, scale) {
     animate();
 }
 
+function addWallObjectToScene(itemType, mouseX, mouseY) {
+    if (!isWallView || !currentWall) return;
+    
+    console.log(`Attempting to add wall object of type: ${itemType} to ${currentWall}`);
+    let modelToAdd;
+    
+    // Clone the appropriate model based on item type
+    if (itemType === 'frame' && frameModel) {
+        modelToAdd = frameModel.clone();
+    } else if (itemType === 'frame2' && frame2Model) {
+        modelToAdd = frame2Model.clone();
+    } else if (itemType === 'frame3' && frame3Model) {
+        modelToAdd = frame3Model.clone();
+    } else if (itemType === 'poster' && posterModel) {
+        modelToAdd = posterModel.clone();
+    } else if (itemType === 'poster2' && poster2Model) {
+        modelToAdd = poster2Model.clone();
+    } else if (itemType === 'poster3' && poster3Model) {
+        modelToAdd = poster3Model.clone();
+    } else if (itemType === 'board' && boardModel) {
+        modelToAdd = boardModel.clone();
+    } else if (itemType === 'clock' && clockModel) {
+        modelToAdd = clockModel.clone();
+    } else if (itemType === 'tv' && tvModel) {
+        modelToAdd = tvModel.clone();
+    } else if (itemType === 'airconditioner' && airConditionerModel) {
+        modelToAdd = airConditionerModel.clone();
+    }
+    
+    if (!modelToAdd) {
+        console.error(`Failed to clone wall model for type: ${itemType}`);
+        return;
+    }
+    
+    // Raycast to find intersection point on wall
+    mouse.set(mouseX, mouseY);
+    raycaster.setFromCamera(mouse, camera);
+    
+    const wallIntersects = raycaster.intersectObjects(wallBoxes);
+    
+    if (wallIntersects.length > 0) {
+        const intersectPoint = wallIntersects[0].point;
+        
+        // Convert 3D intersection to wall grid coordinates
+        let wallX, wallY;
+        if (currentWall === 'wall1') {
+            wallX = intersectPoint.z;
+            wallY = intersectPoint.y;
+        } else if (currentWall === 'wall2') {
+            wallX = intersectPoint.x;
+            wallY = intersectPoint.y;
+        }
+        
+        // Snap to wall grid
+        const gridPos = snapToWallGrid(wallX, wallY, currentWall, itemType);
+        
+        // Check for collision before placing
+        if (checkWallCollision(gridPos.x, gridPos.y, currentWall, itemType)) {
+            console.log('Cannot place wall object: collision detected');
+            return;
+        }
+        
+        // Scale the model appropriately for wall objects
+        let objectScale = 0.06; // Default scale for wall objects
+        if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3') {
+            objectScale = 0.055; // Slightly smaller scale for frames
+        }
+        modelToAdd.scale.setScalar(objectScale);
+        
+        // Position the object on the wall
+        let worldX, worldY, worldZ;
+        if (currentWall === 'wall1') {
+            worldX = -3.92; // Closer to wall, not too far forward
+            worldY = gridPos.y;
+            worldZ = gridPos.x;
+            // Rotate to face outward from wall + additional 90 degrees for frames/boards
+            if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3' || itemType === 'board') {
+                modelToAdd.rotation.set(0, Math.PI, 0); // Face outward and rotate 90 degrees
+            } else {
+                modelToAdd.rotation.y = Math.PI / 2; // Just face outward
+            }
+        } else if (currentWall === 'wall2') {
+            worldX = gridPos.x;
+            worldY = gridPos.y;
+            worldZ = -3.92; // Closer to wall, not too far forward
+            // Rotate for wall2 + additional 90 degrees for frames/boards
+            if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3' || itemType === 'board') {
+                modelToAdd.rotation.set(0, Math.PI / 2, 0); // Face outward and rotate 90 degrees
+            } else {
+                modelToAdd.rotation.y = 0; // Default rotation for wall2
+            }
+        }
+        
+        modelToAdd.position.set(worldX, worldY, worldZ);
+        
+        // Set up user data for wall objects
+        modelToAdd.userData = {
+            type: itemType,
+            id: Date.now() + Math.random(),
+            isWallObject: true,
+            wallName: currentWall,
+            gridX: gridPos.x,
+            gridY: gridPos.y
+        };
+        
+        // Ensure materials are properly set
+        modelToAdd.traverse((child) => {
+            if (child.isMesh) {
+                if (child.material) {
+                    try {
+                        if (Array.isArray(child.material)) {
+                            child.material = child.material.map(mat => {
+                                if (mat && typeof mat.clone === 'function') {
+                                    const clonedMat = mat.clone();
+                                    clonedMat.transparent = false;
+                                    clonedMat.opacity = 1.0;
+                                    return clonedMat;
+                                } else {
+                                    return new THREE.MeshBasicMaterial({
+                                        color: 0x8e44ad,
+                                        transparent: false,
+                                        opacity: 1.0
+                                    });
+                                }
+                            });
+                        } else {
+                            if (child.material && typeof child.material.clone === 'function') {
+                                child.material = child.material.clone();
+                                child.material.transparent = false;
+                                child.material.opacity = 1.0;
+                            } else {
+                                child.material = new THREE.MeshBasicMaterial({
+                                    color: 0x8e44ad,
+                                    transparent: false,
+                                    opacity: 1.0
+                                });
+                            }
+                        }
+                    } catch (error) {
+                        console.warn('Failed to clone wall object material, using fallback:', error);
+                        child.material = new THREE.MeshBasicMaterial({
+                            color: 0x8e44ad,
+                            transparent: false,
+                            opacity: 1.0
+                        });
+                    }
+                }
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+        
+        // Add to scene and tracking array
+        scene.add(modelToAdd);
+        placedWallObjects.push(modelToAdd);
+        
+        // Animate placement
+        modelToAdd.scale.setScalar(0);
+        animateObjectPlacement(modelToAdd, objectScale);
+        
+        console.log('Wall object placed successfully:', itemType, 'at position:', worldX, worldY, worldZ);
+    }
+}
+
 function onMouseClick(event) {
     if (isDragging) return;
     
@@ -1345,15 +1829,16 @@ function onMouseClick(event) {
     }
     
     // If not clicking a wall box, proceed with object selection
-    const intersects = raycaster.intersectObjects(placedObjects, true);
+    let allObjects = [...placedObjects, ...placedWallObjects];
+    const intersects = raycaster.intersectObjects(allObjects, true);
     
     if (intersects.length > 0) {
         let clickedObject = intersects[0].object;
-        while (clickedObject.parent && !placedObjects.includes(clickedObject)) {
+        while (clickedObject.parent && !allObjects.includes(clickedObject)) {
             clickedObject = clickedObject.parent;
         }
         
-        if (placedObjects.includes(clickedObject)) {
+        if (allObjects.includes(clickedObject)) {
             selectObject(clickedObject);
         }
     } else {
@@ -1465,10 +1950,20 @@ function onKeyDown(event) {
 function deleteSelectedObject() {
     if (selectedObject) {
         scene.remove(selectedObject);
-        const index = placedObjects.indexOf(selectedObject);
-        if (index > -1) {
-            placedObjects.splice(index, 1);
+        
+        // Remove from appropriate array
+        if (selectedObject.userData.isWallObject) {
+            const index = placedWallObjects.indexOf(selectedObject);
+            if (index > -1) {
+                placedWallObjects.splice(index, 1);
+            }
+        } else {
+            const index = placedObjects.indexOf(selectedObject);
+            if (index > -1) {
+                placedObjects.splice(index, 1);
+            }
         }
+        
         deselectObject();
     }
 }
@@ -1492,6 +1987,10 @@ function animate() {
 function clearRoom() {
     placedObjects.forEach(obj => scene.remove(obj));
     placedObjects = [];
+    
+    placedWallObjects.forEach(obj => scene.remove(obj));
+    placedWallObjects = [];
+    
     deselectObject();
     
     const instructions = document.getElementById('instructions');
@@ -1951,6 +2450,7 @@ function moveCameraToWall(wallBox) {
     if (isEditMode) return;
      
     isWallView = true;
+    currentWall = wallBox.userData.wallName; // Set which wall we're viewing
     
     // Store current camera state
     originalFOV = camera.fov; // Store original FOV
@@ -1958,6 +2458,15 @@ function moveCameraToWall(wallBox) {
     // Get camera position and target from wall box userData
     const newPosition = wallBox.userData.cameraPosition;
     const newTarget = wallBox.userData.cameraTarget;
+    
+    // Show wall grids for the current wall
+    wallGrids.forEach(wallGrid => {
+        if (wallGrid.wall === currentWall) {
+            wallGrid.grid.visible = true;
+        } else {
+            wallGrid.grid.visible = false;
+        }
+    });
     
     // Disable OrbitControls
     controls.enabled = false;
@@ -2000,6 +2509,17 @@ function resetCamera() {
     if (!isWallView) return;
     
     isWallView = false;
+    currentWall = null; // Clear current wall
+    
+    // Hide all wall grids
+    wallGrids.forEach(wallGrid => {
+        wallGrid.grid.visible = false;
+    });
+    
+    // Hide wall highlight
+    if (wallHighlight) {
+        wallHighlight.visible = false;
+    }
     
     // Switch back to furniture items
     document.getElementById('furniture-items').parentElement.style.display = 'block';
