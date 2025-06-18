@@ -59,8 +59,14 @@ const WALL_GRID_HEIGHT = 4; // 4 rows (top 3/4 of 4-unit wall height)
 const WALL_TILE_SIZE = 1; // 1x1 tile size
 let currentWall = null; // Track which wall we're viewing
 
+// Welcome popup variables
+let currentSlide = 0;
+const totalSlides = 5;
+
 // Initialize the application
 function init() {
+    // Show welcome popup on first load
+    showWelcomePopup();
     // Create scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x3c8491);
@@ -2693,6 +2699,152 @@ function resetCamera() {
     document.getElementById('grid-toggle').style.display = 'block';
     
    springBackCamera()
+}
+
+// Welcome Popup Functions
+function showWelcomePopup() {
+    const popup = document.getElementById('welcome-popup');
+    if (popup) {
+        // Show popup after a short delay for better effect
+        setTimeout(() => {
+            popup.classList.add('show');
+        }, 500);
+        
+        // Setup event listeners
+        setupWelcomePopupEvents();
+    }
+}
+
+function hideWelcomePopup() {
+    const popup = document.getElementById('welcome-popup');
+    if (popup) {
+        popup.classList.remove('show');
+        // Remove from DOM after animation completes
+        setTimeout(() => {
+            popup.style.display = 'none';
+        }, 300);
+    }
+}
+
+function setupWelcomePopupEvents() {
+    // Close button
+    const closeBtn = document.getElementById('close-popup');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', hideWelcomePopup);
+    }
+    
+    // Get started button
+    const getStartedBtn = document.getElementById('get-started-btn');
+    if (getStartedBtn) {
+        getStartedBtn.addEventListener('click', hideWelcomePopup);
+    }
+    
+    // Navigation buttons
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            if (currentSlide > 0) {
+                currentSlide--;
+                updateSlide();
+            }
+        });
+    }
+    
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            if (currentSlide < totalSlides - 1) {
+                currentSlide++;
+                updateSlide();
+            }
+        });
+    }
+    
+    // Indicator clicks
+    const indicators = document.querySelectorAll('.indicator');
+    indicators.forEach((indicator, index) => {
+        indicator.addEventListener('click', () => {
+            currentSlide = index;
+            updateSlide();
+        });
+    });
+    
+    // Close popup when clicking outside
+    const popup = document.getElementById('welcome-popup');
+    if (popup) {
+        popup.addEventListener('click', (e) => {
+            if (e.target === popup) {
+                hideWelcomePopup();
+            }
+        });
+    }
+    
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+        const popup = document.getElementById('welcome-popup');
+        if (popup && popup.classList.contains('show')) {
+            switch(e.key) {
+                case 'Escape':
+                    hideWelcomePopup();
+                    break;
+                case 'ArrowLeft':
+                    if (currentSlide > 0) {
+                        currentSlide--;
+                        updateSlide();
+                    }
+                    break;
+                case 'ArrowRight':
+                    if (currentSlide < totalSlides - 1) {
+                        currentSlide++;
+                        updateSlide();
+                    }
+                    break;
+            }
+        }
+    });
+}
+
+function updateSlide() {
+    // Hide all slides
+    const slides = document.querySelectorAll('.slide');
+    slides.forEach(slide => {
+        slide.classList.remove('active');
+    });
+    
+    // Show current slide
+    if (slides[currentSlide]) {
+        slides[currentSlide].classList.add('active');
+    }
+    
+    // Update indicators
+    const indicators = document.querySelectorAll('.indicator');
+    indicators.forEach((indicator, index) => {
+        if (index === currentSlide) {
+            indicator.classList.add('active');
+        } else {
+            indicator.classList.remove('active');
+        }
+    });
+    
+    // Update navigation buttons
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const getStartedBtn = document.getElementById('get-started-btn');
+    
+    if (prevBtn) {
+        prevBtn.disabled = currentSlide === 0;
+    }
+    
+    if (nextBtn && getStartedBtn) {
+        if (currentSlide === totalSlides - 1) {
+            nextBtn.style.display = 'none';
+            getStartedBtn.style.display = 'inline-block';
+        } else {
+            nextBtn.style.display = 'inline-block';
+            getStartedBtn.style.display = 'none';
+        }
+    }
 }
 
 window.addEventListener('DOMContentLoaded', init); 

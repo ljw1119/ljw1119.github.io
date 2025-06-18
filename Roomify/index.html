@@ -19,6 +19,283 @@
             color: #ecf0f1;
         }
 
+        #welcome-popup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        #welcome-popup.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .popup-container {
+            background: linear-gradient(135deg, #3c8491 0%, #2c3e50 100%);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            position: relative;
+            transform: scale(0.5) rotate(10deg);
+            transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        #welcome-popup.show .popup-container {
+            transform: scale(1) rotate(0deg);
+        }
+
+        .popup-header {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .popup-logo {
+            background: #3498db;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 2em;
+            font-weight: bold;
+            display: inline-block;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
+        }
+
+        .popup-title {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #ecf0f1;
+            margin: 0;
+        }
+
+        .popup-subtitle {
+            font-size: 1em;
+            color: #bdc3c7;
+            margin-top: 5px;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(231, 76, 60, 0.8);
+            color: white;
+            border: none;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .close-btn:hover {
+            background: #e74c3c;
+            transform: scale(1.1);
+        }
+
+        .popup-content {
+            padding: 30px;
+            text-align: center;
+            height: 400px; 
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .slide {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .slide.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .slide-gif {
+            width: 200px;
+            height: 150px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3em;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            overflow: hidden;
+        }
+
+        .slide-gif img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 13px;
+        }
+
+        .slide-title {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: #3498db;
+            margin-bottom: 15px;
+        }
+
+        .slide-description {
+            font-size: 1em;
+            color: #ecf0f1;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .popup-navigation {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 30px;
+            background: rgba(0, 0, 0, 0.2);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            min-width: 80px;
+        }
+
+        .nav-btn:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
+        }
+
+        .nav-btn:disabled {
+            background: #7f8c8d;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .slide-indicators {
+            display: flex;
+            gap: 8px;
+        }
+
+        .indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .indicator.active {
+            background: #3498db;
+            transform: scale(1.2);
+        }
+
+        .get-started-btn {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 30px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4);
+            display: none;
+        }
+
+        .get-started-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(46, 204, 113, 0.6);
+        }
+
+        @keyframes bounceIn {
+            0% {
+                opacity: 0;
+                transform: scale(0.3) rotate(15deg);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1.1) rotate(-5deg);
+            }
+            70% {
+                transform: scale(0.9) rotate(2deg);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) rotate(0deg);
+            }
+        }
+
+        #welcome-popup.show .popup-container {
+            animation: bounceIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @media (max-width: 768px) {
+            .popup-container {
+                width: 95%;
+                margin: 10px;
+            }
+            
+            .popup-content {
+                padding: 20px;
+                height: 280px;
+            }
+            
+            .slide-gif {
+                width: 300px;
+                height: 120px;
+                font-size: 2em;
+            }
+            
+            .slide-gif img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+            
+            .popup-navigation {
+                padding: 15px 20px;
+            }
+        }
+
         #container {
             width: 100vw;
             height: 100vh;
@@ -60,7 +337,6 @@
             overflow-x: hidden;
         }
 
-        /* Custom scrollbar for better appearance */
         #floating-nav::-webkit-scrollbar {
             width: 6px;
         }
@@ -223,11 +499,6 @@
             opacity: 0.8;
             transform: scale(0.8);
             transition: opacity 0.2s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
         }
 
         .fade-in {
@@ -396,6 +667,66 @@
     </style>
 </head>
 <body>
+    <div id="welcome-popup" class="fade-in">
+        <div class="popup-container">
+            <div class="popup-header">
+                <button class="close-btn" id="close-popup">×</button>
+                <div class="popup-logo">ROOMIFY</div>
+                <h1 class="popup-title">Welcome to Roomify</h1>
+                <p class="popup-subtitle">Design your dream bedroom in 3D</p>
+            </div>
+            <div class="popup-content">
+                <div class="slide active">
+                    <div class="slide-gif">
+                        <img src="./Resources/view.gif" alt="Room View Demo" />
+                    </div>
+                    <h2 class="slide-title">Welcome to Roomify</h2>
+                    <p class="slide-description">Transform your bedroom design ideas into reality with our intuitive 3D room designer. Create your dream room with our custom assets.</p>
+                </div>
+                <div class="slide">
+                    <div class="slide-gif">
+                        <img src="./Resources/dragOnScreen.gif" alt="Drag and Drop Demo" />
+                    </div>
+                    <h2 class="slide-title">Drag & Drop Furniture</h2>
+                    <p class="slide-description">Simply drag furniture from the menu and drop them into your room. Watch as they automatically snap to the grid for perfect placement.</p>
+                </div>
+                <div class="slide">
+                    <div class="slide-gif">
+                        <img src="./Resources/move.gif" alt="Move Objects Demo" />
+                    </div>
+                    <h2 class="slide-title">Rotate & Move Objects</h2>
+                    <p class="slide-description">Click on any placed object to select it. Use 'R' to rotate, 'M' to move, or 'Delete' to remove. Everything follows the grid system!</p>
+                </div>
+                <div class="slide">
+                    <div class="slide-gif">
+                        <img src="./Resources/walledit.gif" alt="Wall Editing Demo" />
+                    </div>
+                    <h2 class="slide-title">Wall Decorations</h2>
+                    <p class="slide-description">Click on the walls to enter wall mode. Add frames, posters, and decorations to personalize your space even further.</p>
+                </div>
+                <div class="slide">
+                    <div class="slide-gif">✨</div>
+                    <h2 class="slide-title">Ready to Design?</h2>
+                    <p class="slide-description">You're all set! Start creating your dream bedroom. The camera will automatically return to the main view when you're done exploring.</p>
+                </div>
+            </div>
+            <div class="popup-navigation">
+                <button class="nav-btn" id="prev-btn" disabled>Previous</button>
+                <div class="slide-indicators">
+                    <span class="indicator active" data-slide="0"></span>
+                    <span class="indicator" data-slide="1"></span>
+                    <span class="indicator" data-slide="2"></span>
+                    <span class="indicator" data-slide="3"></span>
+                    <span class="indicator" data-slide="4"></span>
+                </div>
+                <button class="nav-btn" id="next-btn">Next</button>
+            </div>
+            <div style="padding: 20px 30px; text-align: center;">
+                <button class="get-started-btn" id="get-started-btn">Get Started</button>
+            </div>
+        </div>
+    </div>
+
     <div id="container">
         <div id="canvas-container">
             <canvas id="three-canvas"></canvas>
