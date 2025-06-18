@@ -1966,7 +1966,7 @@ function selectObject(object) {
 
 function animateSelectionBox(selectionBox) {
     const startY = selectionBox.position.y;
-    
+
     function animate() {
         if (scene.getObjectByName('selectionBox') === selectionBox) {
             const time = performance.now() * 0.003;
@@ -2563,6 +2563,7 @@ function confirmMove() {
     const selectionBox = scene.getObjectByName('selectionBox');
     if (selectionBox) {
         selectionBox.position.copy(originalObject.position);
+        animateSelectionBox(selectionBox);
     }
     
     console.log('Object moved successfully');
