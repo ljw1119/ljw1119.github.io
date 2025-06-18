@@ -5,7 +5,7 @@ let room;
 let bedModel, chairModel, deskModel, drawerModel, lampModel, shelfModel, trashcanModel;
 // Additional furniture models
 let airConditionerModel, boardModel, clockModel;
-let closetModel, closet2Model, closet3Model;
+let closetModel;
 let doorModel, door2Model;
 let frameModel, frame2Model, frame3Model;
 let posterModel, poster2Model, poster3Model;
@@ -23,6 +23,8 @@ let raycaster = new THREE.Raycaster();
 let originalCameraPosition;
 let originalCameraTarget;
 let isRotating = false;
+let isSpringBackActive = false;
+let springBackTimeoutId = null;
 let selectedObject = null;
 let isWallView = false;
 let wallBoxes = []; // Array to store wall click boxes
@@ -33,10 +35,10 @@ let isEditMode = false;
 let isMoveMode = false;
 let movePreviewObject = null;
 
-// Preview renderers for sidebar
-let previewRenderers = {};
-let previewScenes = {};
-let previewCameras = {};
+// Optimized preview system - single shared renderer
+let sharedPreviewRenderer = null;
+let previewData = {}; // Store model and container references
+let activePreview = null;
 
 // Constants
 const ROOM_SIZE = 8;
@@ -84,20 +86,22 @@ function init() {
     // Create controls
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
+    controls.dampingFactor = 0.1; // Increased from 0.05 for smoother feel
     controls.screenSpacePanning = false;
     controls.minDistance = 6;
     controls.maxDistance = 20;
     const deg = Math.PI / 180;
     controls.maxPolarAngle = deg * 90;
-    controls.minPolarAngle = deg * 0;
-    controls.maxAzimuthAngle = deg * 90; 
-    controls.minAzimuthAngle = deg * 0;
+    controls.minPolarAngle = deg * 10; // Allow some downward angle
+    // Remove azimuth constraints to allow full 360-degree rotation
+    // controls.maxAzimuthAngle = deg * 90; 
+    // controls.minAzimuthAngle = deg * 0;
     controls.target.set(originalCameraTarget.x, originalCameraTarget.y, originalCameraTarget.z);
     
     // Custom spring-back behavior
     controls.addEventListener('start', onControlsStart);
     controls.addEventListener('end', onControlsEnd);
+    controls.addEventListener('change', onControlsChange);
     
     // Setup lighting
     setupLighting();
@@ -203,6 +207,15 @@ function updateWallHighlightSize(itemType) {
     } else if (itemType === 'board') {
         width = 2; // 2 tiles wide
         height = 2; // 2 tiles tall
+    } else if (itemType === 'frame2') {
+        width = 2; // 2 tiles wide
+        height = 2; // 2 tiles tall (2x2 = 4 tiles total)
+    } else if (itemType === 'frame3') {
+        width = 2; // 2 tiles wide
+        height = 1; // 1 tile tall
+    } else if (itemType === 'rack2') {
+        width = 2; // 2 tiles wide
+        height = 1; // 1 tile tall
     } else {
         width = 1; // Default 1x1
         height = 1;
@@ -324,21 +337,40 @@ function snapToWallGrid(worldX, worldY, wallName, itemType = 'frame') {
         // Wall 1 has 8x4 grid: X from -3.5 to 3.5 (centers), Y from 2.5 to 5.5 (centers)
         
         if (itemType === 'airconditioner') {
-            // AC is 1x2 (2 tiles horizontally) - snap to center of 2-tile span
+            // AC is 2x1 (2 tiles horizontally) - snap to center of 2-tile span
             const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
             const snapY = Math.round(worldY - 0.5) + 0.5; // Snap to .5 positions for height
             
             // Constrain to valid positions (accounting for 2-tile width)
-            gridX = Math.max(-2.5, Math.min(2.5, snapX)); // -2.5 to 2.5 (centers of 2-wide spans)
+            // For 8-wide grid (-4 to 4), 2-wide object can be centered from -3 to 3
+            gridX = Math.max(-3, Math.min(3, snapX));
             gridY = Math.max(2.5, Math.min(5.5, snapY));
-        } else if (itemType === 'board') {
-            // Board is 2x2 - snap to center of 2x2 area
+        } else if (itemType === 'board' || itemType === 'frame2') {
+            // Board and Frame2 are 2x2 - snap to center of 2x2 area
             const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
             const snapY = Math.round(worldY); // Snap to integer positions for 2-tall objects
             
             // Constrain to valid positions (accounting for 2x2 size)
-            gridX = Math.max(-2.5, Math.min(2.5, snapX)); // -2.5 to 2.5 (centers of 2-wide spans)
+            // For 8-wide grid (-4 to 4), 2-wide object can be centered from -3 to 3
+            gridX = Math.max(-3, Math.min(3, snapX));
             gridY = Math.max(3, Math.min(5, snapY)); // 3 to 5 (centers of 2-tall spans)
+        } else if (itemType === 'frame3') {
+            // Frame3 is 2x1 - snap to center of 2-tile horizontal span
+            const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
+            const snapY = Math.round(worldY - 0.5) + 0.5; // Snap to .5 positions for height
+            
+            // Constrain to valid positions (accounting for 2-tile width)
+            gridX = Math.max(-3, Math.min(3, snapX));
+            gridY = Math.max(2.5, Math.min(5.5, snapY));
+        } else if (itemType === 'rack2') {
+            // Rack2 is 2x1 - snap to center of 2-tile horizontal span
+            const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
+            const snapY = Math.round(worldY - 0.5) + 0.5; // Snap to .5 positions for height
+            
+            // Constrain to valid positions (accounting for 2-tile width)
+            // For 8-wide grid (-4 to 4), 2-wide object can be centered from -3 to 3
+            gridX = Math.max(-3, Math.min(3, snapX));
+            gridY = Math.max(2.5, Math.min(5.5, snapY));
         } else {
             // Default 1x1 objects - snap to grid square centers
             const snapX = Math.round(worldX - 0.5) + 0.5; // Snap to .5 positions
@@ -352,21 +384,40 @@ function snapToWallGrid(worldX, worldY, wallName, itemType = 'frame') {
         // Wall 2 has 8x4 grid: X from -3.5 to 3.5 (centers), Y from 2.5 to 5.5 (centers)
         
         if (itemType === 'airconditioner') {
-            // AC is 1x2 (2 tiles horizontally) - snap to center of 2-tile span
+            // AC is 2x1 (2 tiles horizontally) - snap to center of 2-tile span
             const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
             const snapY = Math.round(worldY - 0.5) + 0.5; // Snap to .5 positions for height
             
             // Constrain to valid positions (accounting for 2-tile width)
-            gridX = Math.max(-2.5, Math.min(2.5, snapX)); // -2.5 to 2.5 (centers of 2-wide spans)
+            // For 8-wide grid (-4 to 4), 2-wide object can be centered from -3 to 3
+            gridX = Math.max(-3, Math.min(3, snapX));
             gridY = Math.max(2.5, Math.min(5.5, snapY));
-        } else if (itemType === 'board') {
-            // Board is 2x2 - snap to center of 2x2 area
+        } else if (itemType === 'board' || itemType === 'frame2') {
+            // Board and Frame2 are 2x2 - snap to center of 2x2 area
             const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
             const snapY = Math.round(worldY); // Snap to integer positions for 2-tall objects
             
             // Constrain to valid positions (accounting for 2x2 size)
-            gridX = Math.max(-2.5, Math.min(2.5, snapX)); // -2.5 to 2.5 (centers of 2-wide spans)
+            // For 8-wide grid (-4 to 4), 2-wide object can be centered from -3 to 3
+            gridX = Math.max(-3, Math.min(3, snapX));
             gridY = Math.max(3, Math.min(5, snapY)); // 3 to 5 (centers of 2-tall spans)
+        } else if (itemType === 'frame3') {
+            // Frame3 is 2x1 - snap to center of 2-tile horizontal span
+            const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
+            const snapY = Math.round(worldY - 0.5) + 0.5; // Snap to .5 positions for height
+            
+            // Constrain to valid positions (accounting for 2-tile width)
+            gridX = Math.max(-3, Math.min(3, snapX));
+            gridY = Math.max(2.5, Math.min(5.5, snapY));
+        } else if (itemType === 'rack2') {
+            // Rack2 is 2x1 - snap to center of 2-tile horizontal span
+            const snapX = Math.round(worldX); // Snap to integer positions for 2-wide objects
+            const snapY = Math.round(worldY - 0.5) + 0.5; // Snap to .5 positions for height
+            
+            // Constrain to valid positions (accounting for 2-tile width)
+            // For 8-wide grid (-4 to 4), 2-wide object can be centered from -3 to 3
+            gridX = Math.max(-3, Math.min(3, snapX));
+            gridY = Math.max(2.5, Math.min(5.5, snapY));
         } else {
             // Default 1x1 objects - snap to grid square centers
             const snapX = Math.round(worldX - 0.5) + 0.5; // Snap to .5 positions
@@ -406,22 +457,34 @@ function snapToGrid(worldX, worldZ, itemType = 'single-block', rotationY = 0) {
             gridZ = Math.max(-3.5, Math.min(3.5, gridZ));
         }
     } 
-    else if(itemType === 'sofa2' || itemType === 'closet' || itemType === 'closet2') {
-        // 2x1 or 1x2 objects (long-block) and
+    else if(itemType === 'closet') {
+        // 1x1 single tile object (closet3 renamed to closet)
+        gridX = Math.floor(worldX) + 0.5;
+        gridZ = Math.floor(worldZ) + 0.5;
+        
+        // Clamp to room bounds: -3.5 to 3.5
+        gridX = Math.max(-3.5, Math.min(3.5, gridX));
+        gridZ = Math.max(-3.5, Math.min(3.5, gridZ));
+    }
+    else if(itemType === 'sofa2') {
+        // 2x1 or 1x2 objects (sofa2) - 2 tiles long
+        // Since sofa2 gets default 90° rotation, it starts as 1x2 (vertical)
         const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
         const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
         
         if (isHorizontal) {
-            gridX = Math.round(worldX) + 0.5;
-            gridZ = Math.floor(worldZ) + 0.5;
+            // After 90° rotation: 1 tile wide, 2 tiles deep (vertical orientation)
+            gridX = Math.floor(worldX) + 0.5; // Standard grid center for width
+            gridZ = Math.round(worldZ); // Snap to integer positions for 2-deep objects
                 
-            gridX = Math.max(-3, Math.min(3, gridX));
-            gridZ = Math.max(-2.5, Math.min(2.5, gridZ));
+            gridX = Math.max(-3.5, Math.min(3.5, gridX));
+            gridZ = Math.max(-3, Math.min(3, gridZ)); // 2-tile depth: -3 to 3
         } else {
-            gridX = Math.floor(worldX) + 0.5; 
-            gridZ = Math.round(worldZ) + 0.5;
+            // No rotation: 2 tiles wide, 1 tile deep (horizontal orientation)
+            gridX = Math.round(worldX); // Snap to integer positions for 2-wide objects
+            gridZ = Math.floor(worldZ) + 0.5; // Standard grid center for depth
             
-            gridX = Math.max(-3, Math.min(3, gridX));
+            gridX = Math.max(-3, Math.min(3, gridX)); // 2-tile width: -3 to 3
             gridZ = Math.max(-3.5, Math.min(3.5, gridZ));
         }
     } 
@@ -463,19 +526,16 @@ function getObjectDimensions(type, rotationY = 0) {
         const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
         const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
         return isHorizontal ? { width: 1, depth: 3 } : { width: 3, depth: 1 };
-    } else if (type === 'closet' || type === 'closet2') {
-        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
-        return isHorizontal ? { width: 2, depth: 1 } : { width: 1, depth: 2 };
-    } else if (type === 'rack2') {
-        const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-        const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
-        return isHorizontal ? { width: 2, depth: 1 } : { width: 1, depth: 2 };
-
+    } else if (type === 'closet') {
+        // Closet is 1x1 (single tile)
+        return { width: 1, depth: 1 };
     } else if (type === 'sofa2') {
+        // Sofa2 gets default 90° rotation, so it starts as 1x2 (vertical)
+        // We need to account for the default rotation + any additional rotation
         const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
         const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
-        return isHorizontal ? { width: 3, depth: 1 } : { width: 1, depth: 3 };
+        // After 90° default rotation: horizontal means 1x2, not horizontal means 2x1
+        return isHorizontal ? { width: 1, depth: 2 } : { width: 2, depth: 1 };
     } else if (type === 'tv') {
         const normalizedRotation = ((rotationY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
         const isHorizontal = Math.abs(Math.sin(normalizedRotation)) > 0.9;
@@ -529,6 +589,12 @@ function checkWallCollision(newX, newY, wallName, newType) {
             return { width: 2, height: 1 }; // 2 tiles wide, 1 tile tall
         } else if (type === 'board') {
             return { width: 2, height: 2 }; // 2 tiles wide, 2 tiles tall
+        } else if (type === 'frame2') {
+            return { width: 2, height: 2 }; // 2x2 tiles (4 tiles total)
+        } else if (type === 'frame3') {
+            return { width: 2, height: 1 }; // 2 tiles wide, 1 tile tall
+        } else if (type === 'rack2') {
+            return { width: 2, height: 1 }; // 2 tiles wide, 1 tile tall
         } else {
             return { width: 1, height: 1 }; // Default 1x1
         }
@@ -621,13 +687,11 @@ function loadModels() {
         { file: 'Drawer.fbx', variable: 'drawerModel', scale: 0.08 },
         { file: 'Lamp.fbx', variable: 'lampModel', scale: 0.08 },
         { file: 'Shelf.fbx', variable: 'shelfModel', scale: 0.07 },
-        { file: 'Trashcan.fbx', variable: 'trashcanModel', scale: 0.1 },
+        { file: 'Trashcan.fbx', variable: 'trashcanModel', scale: 0.08 },
         { file: 'AirConditioner.fbx', variable: 'airConditionerModel', scale: 0.08 },
         { file: 'Board.fbx', variable: 'boardModel', scale: 0.08 },
         { file: 'Clock.fbx', variable: 'clockModel', scale: 0.08 },
-        { file: 'Closet.fbx', variable: 'closetModel', scale: 0.08 },
-        { file: 'Closet2.fbx', variable: 'closet2Model', scale: 0.08 },
-        { file: 'Closet3.fbx', variable: 'closet3Model', scale: 0.08 },
+        { file: 'Closet3.fbx', variable: 'closetModel', scale: 0.06 },
         { file: 'Door.fbx', variable: 'doorModel', scale: 0.08 },
         { file: 'Door2.fbx', variable: 'door2Model', scale: 0.08 },
         { file: 'Frame.fbx', variable: 'frameModel', scale: 0.08 },
@@ -636,8 +700,8 @@ function loadModels() {
         { file: 'Poster.fbx', variable: 'posterModel', scale: 0.08 },
         { file: 'Poster2.fbx', variable: 'poster2Model', scale: 0.08 },
         { file: 'Poster3.fbx', variable: 'poster3Model', scale: 0.08 },
-        { file: 'Rack.fbx', variable: 'rackModel', scale: 0.08 },
-        { file: 'Rack2.fbx', variable: 'rack2Model', scale: 0.08 },
+        { file: 'Rack.fbx', variable: 'rackModel', scale: 0.06 },
+        { file: 'Rack2.fbx', variable: 'rack2Model', scale: 0.06 },
         { file: 'Sofa.fbx', variable: 'sofaModel', scale: 0.08 },
         { file: 'Sofa2.fbx', variable: 'sofa2Model', scale: 0.08 },
         { file: 'Table.fbx', variable: 'tableModel', scale: 0.08 },
@@ -688,8 +752,9 @@ function loadModels() {
             // Use eval to dynamically assign to the correct variable
             eval(`${item.variable} = wrapper`);
             
-            // Create model preview
-            createModelPreview(wrapper, `${furnitureType}-preview`);
+            // Create model preview - handle special case for closet3 -> closet rename
+            const previewId = furnitureType === 'closet3' ? 'closet-preview' : `${furnitureType}-preview`;
+            createModelPreview(wrapper, previewId);
             console.log(`${item.file} model ready and preview created`);
         }, (progress) => {
             const percent = (progress.loaded / progress.total * 100).toFixed(1);
@@ -704,97 +769,247 @@ function createModelPreview(model, containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
     
-    // Create preview scene
-    const previewScene = new THREE.Scene();
-    previewScene.background = new THREE.Color(0x17202a);
+    // Store model reference for lazy loading
+    previewData[containerId] = {
+        model: model,
+        container: container,
+        canvas: null,
+        isVisible: false
+    };
     
-    // Create preview camera
-    const previewCamera = new THREE.PerspectiveCamera(50, 50/40, 0.1, 100); // Adjusted aspect ratio for smaller preview
-    previewCamera.position.set(2, 2, 2);
-    previewCamera.lookAt(0, 0, 0);
+    // Create placeholder instead of immediately rendering
+    const placeholder = document.createElement('div');
+    placeholder.style.width = '50px';
+    placeholder.style.height = '40px';
+    placeholder.style.background = 'rgba(23, 32, 42, 0.8)';
+    placeholder.style.border = '1px solid #34495e';
+    placeholder.style.borderRadius = '4px';
+    placeholder.style.display = 'flex';
+    placeholder.style.alignItems = 'center';
+    placeholder.style.justifyContent = 'center';
+    placeholder.style.color = '#7f8c8d';
+    placeholder.style.fontSize = '10px';
+    placeholder.textContent = '3D';
     
-    // Create preview renderer
-    const previewRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    previewRenderer.setSize(50, 40); // Smaller size for floating nav
-    previewRenderer.shadowMap.enabled = true;
-    previewRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(placeholder);
     
-    // Add lighting to preview scene
+    // Set up intersection observer for lazy loading
+    setupLazyPreview(containerId);
+}
+
+function setupLazyPreview(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    // Create intersection observer to detect when preview becomes visible
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting && !previewData[containerId].isVisible) {
+                previewData[containerId].isVisible = true;
+                loadPreview(containerId);
+            }
+        });
+    }, {
+        rootMargin: '50px' // Load slightly before coming into view
+    });
+    
+    observer.observe(container);
+}
+
+function loadPreview(containerId) {
+    const data = previewData[containerId];
+    if (!data || data.canvas) return; // Already loaded
+    
+    // Initialize shared renderer if not created
+    if (!sharedPreviewRenderer) {
+        initSharedPreviewRenderer();
+    }
+    
+    // Create canvas for this preview
+    const canvas = document.createElement('canvas');
+    canvas.width = 50;
+    canvas.height = 40;
+    canvas.style.width = '50px';
+    canvas.style.height = '40px';
+    canvas.style.borderRadius = '4px';
+    
+    // Replace placeholder with canvas
+    const container = data.container;
+    container.innerHTML = '';
+    container.appendChild(canvas);
+    
+    // Store canvas reference
+    data.canvas = canvas;
+    
+    // Render initial frame
+    renderPreview(containerId);
+    
+    // Start animation for this preview
+    startPreviewAnimation(containerId);
+}
+
+function initSharedPreviewRenderer() {
+    // Create a temporary canvas for the shared renderer
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = 50;
+    tempCanvas.height = 40;
+    
+    sharedPreviewRenderer = new THREE.WebGLRenderer({ 
+        canvas: tempCanvas,
+        antialias: true, 
+        alpha: true,
+        preserveDrawingBuffer: true
+    });
+    sharedPreviewRenderer.setSize(50, 40);
+    sharedPreviewRenderer.shadowMap.enabled = false; // Disable shadows for performance
+}
+
+function renderPreview(containerId) {
+    const data = previewData[containerId];
+    if (!data || !data.canvas || !sharedPreviewRenderer) return;
+    
+    // Create temporary scene for this model
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x17202a);
+    
+    // Create camera
+    const camera = new THREE.PerspectiveCamera(50, 50/40, 0.1, 100);
+    
+    // Add lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    previewScene.add(ambientLight);
+    scene.add(ambientLight);
     
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(2, 2, 1);
-    directionalLight.castShadow = true;
-    previewScene.add(directionalLight);
+    scene.add(directionalLight);
     
-    // Clone and add model to preview scene
-    const previewModel = model.clone();
-    previewModel.position.set(0, 0, 0); // Model should already be centered from loading
+    // Clone and add model
+    const previewModel = data.model.clone();
+    previewModel.position.set(0, 0, 0);
     
-    // Calculate model bounds for camera framing only
+    // Calculate optimal camera position
     const box = new THREE.Box3().setFromObject(previewModel);
     const size = box.getSize(new THREE.Vector3());
-    
-    // Adjust camera based on model size but don't move the model
     const maxDim = Math.max(size.x, size.y, size.z);
-    previewCamera.position.set(maxDim, maxDim, maxDim);
-    previewCamera.lookAt(0, 0, 0);
+    camera.position.set(maxDim, maxDim, maxDim);
+    camera.lookAt(0, 0, 0);
     
-    previewScene.add(previewModel);
+    scene.add(previewModel);
     
-    // Add canvas to container
-    container.appendChild(previewRenderer.domElement);
+    // Store rotation for animation
+    if (!data.rotation) data.rotation = 0;
+    previewModel.rotation.y = data.rotation;
     
-    // Store references for animation
-    previewRenderers[containerId] = previewRenderer;
-    previewScenes[containerId] = previewScene;
-    previewCameras[containerId] = previewCamera;
+    // Render to shared renderer
+    sharedPreviewRenderer.render(scene, camera);
     
-    // Render the preview
-    previewRenderer.render(previewScene, previewCamera);
+    // Copy rendered image to preview canvas
+    const ctx = data.canvas.getContext('2d');
+    ctx.drawImage(sharedPreviewRenderer.domElement, 0, 0);
     
-    // Add rotation animation
-    function animatePreview() {
-        if (previewModel) {
-            previewModel.rotation.y += 0.01;
-            previewRenderer.render(previewScene, previewCamera);
+    // Clean up temporary scene
+    scene.remove(previewModel);
+    scene.remove(ambientLight);
+    scene.remove(directionalLight);
+}
+
+function startPreviewAnimation(containerId) {
+    const data = previewData[containerId];
+    if (!data) return;
+    
+    function animate() {
+        if (data.isVisible && data.canvas) {
+            data.rotation = (data.rotation || 0) + 0.01;
+            renderPreview(containerId);
+            setTimeout(() => requestAnimationFrame(animate), 50); // Slower animation for performance
         }
-        requestAnimationFrame(animatePreview);
     }
-    animatePreview();
+    animate();
 }
 
 function onControlsStart() {
     isRotating = true;
+    isSpringBackActive = false; // Stop any ongoing spring-back
+    
+    // Clear any pending spring-back timeout
+    if (springBackTimeoutId) {
+        clearTimeout(springBackTimeoutId);
+        springBackTimeoutId = null;
+    }
 }
 
 function onControlsEnd() {
     isRotating = false;
-    setTimeout(() => {
+    
+    // Clear any existing timeout first
+    if (springBackTimeoutId) {
+        clearTimeout(springBackTimeoutId);
+    }
+    
+    // Set a new timeout for spring-back
+    springBackTimeoutId = setTimeout(() => {
         if (!isRotating && !isWallView) {
             springBackCamera();
         }
+        springBackTimeoutId = null;
     }, 1500);
 }
 
+function onControlsChange() {
+    // Only cancel spring-back if user is actively interacting (not during spring-back animation)
+    if (isSpringBackActive && isRotating) {
+        isSpringBackActive = false; // Cancel any ongoing spring-back
+    }
+}
+
 function springBackCamera() {
+    // Don't start spring-back if user is interacting or in special modes
+    if (isRotating || isWallView || isEditMode || isDragging || isMoveMode) {
+        return;
+    }
+    
+    isSpringBackActive = true;
     const duration = 1000;
     const startPosition = camera.position.clone();
     const startTarget = controls.target.clone();
     const startTime = performance.now();
+    const startFOV = camera.fov;
+    
+    // Temporarily disable controls damping to prevent conflicts
+    const originalDamping = controls.enableDamping;
+    controls.enableDamping = false;
     
     function animateCamera() {
+        // Stop animation if user starts interacting
+        if (isRotating || isWallView || isEditMode || isDragging || isMoveMode) {
+            isSpringBackActive = false;
+            controls.enableDamping = originalDamping; // Restore damping
+            return;
+        }
+        
+        if (!isSpringBackActive) {
+            controls.enableDamping = originalDamping; // Restore damping
+            return; // Animation was cancelled
+        }
+        
         const elapsed = performance.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
         const eased = 1 - Math.pow(1 - progress, 3);
         
         camera.position.lerpVectors(startPosition, originalCameraPosition, eased);
         controls.target.lerpVectors(startTarget, originalCameraTarget, eased);
-        controls.update();
+        
+        // Restore FOV if it was changed
+        if (startFOV !== originalFOV) {
+            camera.fov = startFOV + (originalFOV - startFOV) * eased;
+            camera.updateProjectionMatrix();
+        }
         
         if (progress < 1) {
             requestAnimationFrame(animateCamera);
+        } else {
+            isSpringBackActive = false;
+            controls.enableDamping = originalDamping; // Restore damping
         }
     }
     
@@ -906,10 +1121,6 @@ function startDragPreview(itemType) {
         modelToPreview = clockModel.clone();
     } else if (itemType === 'closet' && closetModel) {
         modelToPreview = closetModel.clone();
-    } else if (itemType === 'closet2' && closet2Model) {
-        modelToPreview = closet2Model.clone();
-    } else if (itemType === 'closet3' && closet3Model) {
-        modelToPreview = closet3Model.clone();
     } else if (itemType === 'door' && doorModel) {
         modelToPreview = doorModel.clone();
     } else if (itemType === 'door2' && door2Model) {
@@ -958,13 +1169,13 @@ function startDragPreview(itemType) {
         } else if (itemType === 'lamp') {
             objectScale = 0.08;
         } else if (itemType === 'trashcan') {
-            objectScale = 0.06;
+            objectScale = 0.05;
         } else if (itemType === 'airconditioner') {
             objectScale = isWallView ? 0.06 : 0.08;
         } else if (itemType === 'clock') {
             objectScale = isWallView ? 0.06 : 0.08;
-        } else if (itemType === 'closet' || itemType === 'closet2' || itemType === 'closet3') {
-            objectScale = 0.08;
+        } else if (itemType === 'closet') {
+            objectScale = 0.06;
         } else if (itemType === 'door' || itemType === 'door2') {
             objectScale = 0.08;
         } else if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3') {
@@ -974,7 +1185,7 @@ function startDragPreview(itemType) {
         } else if (itemType === 'board') {
             objectScale = isWallView ? 0.06 : 0.08;
         } else if (itemType === 'rack' || itemType === 'rack2') {
-            objectScale = 0.08;
+            objectScale = 0.06; // Scaled down for better size
         } else if (itemType === 'sofa' || itemType === 'sofa2') {
             objectScale = 0.06;
         } else if (itemType === 'table' || itemType === 'table2') {
@@ -1043,6 +1254,20 @@ function startDragPreview(itemType) {
         dragPreviewObject = modelToPreview;
         dragPreviewObject.userData.itemType = itemType;
         dragPreviewObject.userData.yOffset = yOffset; // Store the pre-calculated offset
+        
+        // Apply the same default rotation that will be applied when placing the object
+        let previewRotation = 0;
+        if (itemType === 'long-block') {
+            previewRotation = Math.PI / 2;
+        } else if (itemType === 'closet') {
+            previewRotation = Math.PI / 2; // 90 degrees to the right
+        } else if (itemType === 'sofa2') {
+            previewRotation = Math.PI / 2; // 90 degrees to the right
+        }
+        
+        dragPreviewObject.rotation.y = previewRotation;
+        dragPreviewObject.userData.defaultRotation = previewRotation; // Store for later use
+        
         scene.add(dragPreviewObject);
     }
 }
@@ -1091,6 +1316,8 @@ function updateDragPreview(event) {
                 // Apply correct rotation for preview
                 if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3' || itemType === 'board') {
                     dragPreviewObject.rotation.set(0, Math.PI, 0);
+                } else if (itemType === 'rack' || itemType === 'rack2') {
+                    dragPreviewObject.rotation.set(0, Math.PI / 2 + Math.PI / 2, 0); // Face outward + 90 degrees
                 } else {
                     dragPreviewObject.rotation.y = Math.PI / 2;
                 }
@@ -1102,6 +1329,8 @@ function updateDragPreview(event) {
                 // Apply correct rotation for preview
                 if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3' || itemType === 'board') {
                     dragPreviewObject.rotation.set(0, Math.PI / 2, 0);
+                } else if (itemType === 'rack' || itemType === 'rack2') {
+                    dragPreviewObject.rotation.set(0, Math.PI / 2, 0); // Face outward + 90 degrees
                 } else {
                     dragPreviewObject.rotation.y = 0;
                 }
@@ -1144,8 +1373,8 @@ function updateDragPreview(event) {
             const itemType = dragPreviewObject.userData.itemType;
             
             // Use fixed grid snapping with proper rotation
-            // New long blocks start with π/2 rotation (horizontal)
-            const objectRotation = itemType === 'long-block' ? Math.PI / 2 : 0;
+            // Use the preview object's current rotation for consistency
+            const objectRotation = dragPreviewObject.rotation.y;
             const gridPos = snapToGrid(intersectPoint.x, intersectPoint.z, itemType, objectRotation);
             
             // Check for collision
@@ -1248,10 +1477,6 @@ function addObjectToScene(itemType, mouseX, mouseY) {
         modelToAdd = clockModel.clone();
     } else if (itemType === 'closet' && closetModel) {
         modelToAdd = closetModel.clone();
-    } else if (itemType === 'closet2' && closet2Model) {
-        modelToAdd = closet2Model.clone();
-    } else if (itemType === 'closet3' && closet3Model) {
-        modelToAdd = closet3Model.clone();
     } else if (itemType === 'door' && doorModel) {
         modelToAdd = doorModel.clone();
     } else if (itemType === 'door2' && door2Model) {
@@ -1363,8 +1588,15 @@ function addObjectToScene(itemType, mouseX, mouseY) {
             const intersectPoint = floorIntersects[0].point;
             
             // Use fixed grid snapping with proper rotation
-            // New long blocks start with π/2 rotation (horizontal)
-            const objectRotation = itemType === 'long-block' ? Math.PI / 2 : 0;
+            // Apply the same default rotations that were applied to the preview
+            let objectRotation = 0;
+            if (itemType === 'long-block') {
+                objectRotation = Math.PI / 2;
+            } else if (itemType === 'closet') {
+                objectRotation = Math.PI / 2; // 90 degrees to the right
+            } else if (itemType === 'sofa2') {
+                objectRotation = Math.PI / 2; // 90 degrees to the right
+            }
             const gridPos = snapToGrid(intersectPoint.x, intersectPoint.z, itemType, objectRotation);
             
             // Check for collision before placing
@@ -1390,15 +1622,15 @@ function addObjectToScene(itemType, mouseX, mouseY) {
             } else if (itemType === 'lamp') {
                 objectScale = 0.08;
             } else if (itemType === 'trashcan') {
-                objectScale = 0.06;
+                objectScale = 0.05;
             } else if (itemType === 'airconditioner') {
                 objectScale = 0.08;
             } else if (itemType === 'board') {
                 objectScale = 0.08;
             } else if (itemType === 'clock') {
                 objectScale = 0.08;
-            } else if (itemType === 'closet' || itemType === 'closet2' || itemType === 'closet3') {
-                objectScale = 0.08;
+            } else if (itemType === 'closet') {
+                objectScale = 0.06;
             } else if (itemType === 'door' || itemType === 'door2') {
                 objectScale = 0.08;
             } else if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3') {
@@ -1496,6 +1728,10 @@ function addWallObjectToScene(itemType, mouseX, mouseY) {
         modelToAdd = tvModel.clone();
     } else if (itemType === 'airconditioner' && airConditionerModel) {
         modelToAdd = airConditionerModel.clone();
+    } else if (itemType === 'rack' && rackModel) {
+        modelToAdd = rackModel.clone();
+    } else if (itemType === 'rack2' && rack2Model) {
+        modelToAdd = rack2Model.clone();
     }
     
     if (!modelToAdd) {
@@ -1535,6 +1771,8 @@ function addWallObjectToScene(itemType, mouseX, mouseY) {
         let objectScale = 0.06; // Default scale for wall objects
         if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3') {
             objectScale = 0.055; // Slightly smaller scale for frames
+        } else if (itemType === 'rack' || itemType === 'rack2') {
+            objectScale = 0.06; // Scaled down for better size
         }
         modelToAdd.scale.setScalar(objectScale);
         
@@ -1544,9 +1782,11 @@ function addWallObjectToScene(itemType, mouseX, mouseY) {
             worldX = -3.92; // Closer to wall, not too far forward
             worldY = gridPos.y;
             worldZ = gridPos.x;
-            // Rotate to face outward from wall + additional 90 degrees for frames/boards
+            // Rotate to face outward from wall + additional 90 degrees for frames/boards/racks
             if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3' || itemType === 'board') {
                 modelToAdd.rotation.set(0, Math.PI, 0); // Face outward and rotate 90 degrees
+            } else if (itemType === 'rack' || itemType === 'rack2') {
+                modelToAdd.rotation.set(0, Math.PI / 2 + Math.PI / 2, 0); // Face outward + 90 degrees
             } else {
                 modelToAdd.rotation.y = Math.PI / 2; // Just face outward
             }
@@ -1554,9 +1794,11 @@ function addWallObjectToScene(itemType, mouseX, mouseY) {
             worldX = gridPos.x;
             worldY = gridPos.y;
             worldZ = -3.92; // Closer to wall, not too far forward
-            // Rotate for wall2 + additional 90 degrees for frames/boards
+            // Rotate for wall2 + additional 90 degrees for frames/boards/racks
             if (itemType === 'frame' || itemType === 'frame2' || itemType === 'frame3' || itemType === 'board') {
                 modelToAdd.rotation.set(0, Math.PI / 2, 0); // Face outward and rotate 90 degrees
+            } else if (itemType === 'rack' || itemType === 'rack2') {
+                modelToAdd.rotation.set(0, Math.PI / 2, 0); // Face outward + 90 degrees
             } else {
                 modelToAdd.rotation.y = 0; // Default rotation for wall2
             }
@@ -1648,12 +1890,14 @@ function onMouseClick(event) {
     
     raycaster.setFromCamera(mouse, camera);
     
-    // Check for wall box clicks first
-    const wallBoxIntersects = raycaster.intersectObjects(wallBoxes);
-    if (wallBoxIntersects.length > 0) {
-        const wallBox = wallBoxIntersects[0].object;
-        moveCameraToWall(wallBox);  // 이 부분이 wall view로 이동하는 함수입니다.
-        return;
+    // Check for wall box clicks first - but only if not already in wall view
+    if (!isWallView) {
+        const wallBoxIntersects = raycaster.intersectObjects(wallBoxes);
+        if (wallBoxIntersects.length > 0) {
+            const wallBox = wallBoxIntersects[0].object;
+            moveCameraToWall(wallBox);
+            return;
+        }
     }
     
     // If not clicking a wall box, proceed with object selection
@@ -1667,6 +1911,7 @@ function onMouseClick(event) {
         }
         
         if (allObjects.includes(clickedObject)) {
+            console.log('Object selected:', clickedObject.userData.type, 'isWallObject:', clickedObject.userData.isWallObject);
             selectObject(clickedObject);
         }
     } else {
@@ -1680,11 +1925,19 @@ function selectObject(object) {
     selectedObject = object;
     isEditMode = true;
     
-    // Show edit menu
-    const editMenu = document.getElementById('edit-menu');
-    if (editMenu) {
-        editMenu.style.display = 'block';
-        setTimeout(() => editMenu.classList.add('show'), 10);
+    // Show appropriate edit menu based on object type
+    if (object.userData.isWallObject) {
+        const wallEditMenu = document.getElementById('wall-edit-menu');
+        if (wallEditMenu) {
+            wallEditMenu.style.display = 'block';
+            setTimeout(() => wallEditMenu.classList.add('show'), 10);
+        }
+    } else {
+        const editMenu = document.getElementById('edit-menu');
+        if (editMenu) {
+            editMenu.style.display = 'block';
+            setTimeout(() => editMenu.classList.add('show'), 10);
+        }
     }
     
     const box = new THREE.Box3().setFromObject(object);
@@ -1733,11 +1986,17 @@ function deselectObject() {
     isEditMode = false;
     exitMoveMode();
     
-    // Hide edit menu
+    // Hide both edit menus
     const editMenu = document.getElementById('edit-menu');
     if (editMenu) {
         editMenu.style.display = 'none';
         editMenu.classList.remove('show');
+    }
+    
+    const wallEditMenu = document.getElementById('wall-edit-menu');
+    if (wallEditMenu) {
+        wallEditMenu.style.display = 'none';
+        wallEditMenu.classList.remove('show');
     }
 }
 
@@ -1760,6 +2019,11 @@ function onKeyDown(event) {
         deleteSelectedObject();
     } else if (event.key.toLowerCase() === 'r' && selectedObject && isEditMode && !isMoveMode) {
         event.preventDefault();
+        // Don't allow rotation for wall objects
+        if (selectedObject.userData.isWallObject) {
+            console.log('Rotation not allowed for wall objects');
+            return;
+        }
         console.log('R key pressed - attempting rotation');
         try {
             rotateSelectedObject();
@@ -1769,9 +2033,26 @@ function onKeyDown(event) {
     } else if (event.key.toLowerCase() === 'm' && selectedObject && isEditMode && !isMoveMode) {
         event.preventDefault();
         enterMoveMode();
-    } else if (event.key === 'Escape' && isMoveMode) {
+    } else if (event.key === 'Escape') {
         event.preventDefault();
+        handleEscapeKey();
+    }
+}
+
+function handleEscapeKey() {
+    // Hierarchy: room view -> wall view -> wall object selection
+    // Escape goes back one step at a time
+    
+    if (isMoveMode) {
+        // If in move mode, exit move mode first (stay in current view)
         exitMoveMode();
+    } else if (selectedObject && isEditMode) {
+        // If object is selected, deselect it (stay in current view)
+        deselectObject();
+        // Note: deselectObject() preserves wall view state if we're in wall view
+    } else if (isWallView) {
+        // If in wall view without any selection, go back to room view
+        resetCamera();
     }
 }
 
@@ -1888,6 +2169,67 @@ function rotateSelectedObject() {
         }
         flashSelectionBox(true);
     }
+    else if (objType === 'sofa2') {
+        // Store old position and rotation
+        const oldPosition = selectedObject.position.clone();
+        const oldRotation = selectedObject.rotation.y;
+        
+        // Rotate 90 degrees
+        selectedObject.rotation.y += Math.PI / 2;
+        
+        // Get new rotation normalized to 0-2π
+        const newRotation = selectedObject.rotation.y % (2 * Math.PI);
+        
+        // Sofa2 starts with 90° default rotation, so we need to check its orientation
+        // After the rotation, determine if it's horizontal or vertical
+        const isHorizontal = Math.abs(Math.sin(newRotation)) > 0.9;
+        
+        // Check boundaries and adjust position if needed
+        // Sofa2 is 2 tiles, so it needs boundary checking
+        if (isHorizontal) {
+            // 1 tile wide, 2 tiles deep (vertical orientation)
+            // Check if it goes out of bounds in Z direction
+            if (selectedObject.position.z > 3 || selectedObject.position.z < -3) {
+                // Move to safe position
+                selectedObject.position.z = Math.max(-3, Math.min(3, selectedObject.position.z));
+            }
+        } else {
+            // 2 tiles wide, 1 tile deep (horizontal orientation)  
+            // Check if it goes out of bounds in X direction
+            if (selectedObject.position.x > 3 || selectedObject.position.x < -3) {
+                // Move to safe position
+                selectedObject.position.x = Math.max(-3, Math.min(3, selectedObject.position.x));
+            }
+        }
+        
+        // Snap to grid after rotation to ensure proper alignment
+        const gridPos = snapToGrid(selectedObject.position.x, selectedObject.position.z, objType, selectedObject.rotation.y);
+        selectedObject.position.x = gridPos.x;
+        selectedObject.position.z = gridPos.z;
+        
+        // Check for collisions after rotation and repositioning (exclude self)
+        const objIndex = placedObjects.indexOf(selectedObject);
+        const tempPlacedObjects = placedObjects.slice();
+        tempPlacedObjects.splice(objIndex, 1); // Remove self from collision check
+        
+        const originalPlacedObjects = placedObjects;
+        placedObjects = tempPlacedObjects;
+        
+        const hasCollision = checkCollision(selectedObject.position.x, selectedObject.position.z, objType, selectedObject.rotation.y);
+        
+        placedObjects = originalPlacedObjects; // Restore original array
+        
+        if (hasCollision) {
+            // If collision detected, revert to old position and rotation
+            selectedObject.position.copy(oldPosition);
+            selectedObject.rotation.y = oldRotation;
+            flashSelectionBox(false); // Red flash for failure
+            console.log('Sofa2 rotation blocked due to collision');
+        } else {
+            flashSelectionBox(true); // Green flash for success
+            console.log('Sofa2 rotated successfully');
+        }
+    }
     else {
         // Single blocks and 1x1 furniture just rotate in place
         selectedObject.rotation.y += Math.PI / 2;
@@ -1919,6 +2261,12 @@ function flashSelectionBox(success) {
 // Enter move mode for selected object
 function enterMoveMode() {
     if (!selectedObject || !isEditMode) return;
+    
+    // For wall objects in wall view, we need to handle them differently
+    if (selectedObject.userData.isWallObject && !isWallView) {
+        console.log('Cannot move wall object while not in wall view');
+        return;
+    }
     
     isMoveMode = true;
     
@@ -2015,6 +2363,13 @@ function exitMoveMode() {
         groundHighlight.material.color.setHex(0x00ff00); // Reset to green
     }
     
+    // Hide wall highlight and reset
+    if (wallHighlight) {
+        wallHighlight.visible = false;
+        updateWallHighlightSize('default'); // Reset to 1x1
+        wallHighlight.material.color.setHex(0x00ff00); // Reset to green
+    }
+    
     // Reset cursor
     renderer.domElement.style.cursor = 'default';
 }
@@ -2030,6 +2385,86 @@ function updateMovePreview(event) {
     mouse.set(x, y);
     raycaster.setFromCamera(mouse, camera);
     
+    // Handle wall objects differently
+    if (movePreviewObject.userData.isWallObject && isWallView) {
+        // Wall object movement logic
+        const wallIntersects = raycaster.intersectObjects(wallBoxes);
+        
+        if (wallIntersects.length > 0) {
+            const intersectPoint = wallIntersects[0].point;
+            const itemType = movePreviewObject.userData.type;
+            const wallName = movePreviewObject.userData.wallName;
+            
+            // Convert 3D intersection to wall grid coordinates
+            let wallX, wallY;
+            if (wallName === 'wall1') {
+                wallX = intersectPoint.z;
+                wallY = intersectPoint.y;
+            } else if (wallName === 'wall2') {
+                wallX = intersectPoint.x;
+                wallY = intersectPoint.y;
+            }
+            
+            // Snap to wall grid
+            const gridPos = snapToWallGrid(wallX, wallY, wallName, itemType);
+            
+            // Check for collision, excluding the original object
+            const originalObject = movePreviewObject.userData.originalObject;
+            const objIndex = placedWallObjects.indexOf(originalObject);
+            const tempPlacedWallObjects = placedWallObjects.slice();
+            tempPlacedWallObjects.splice(objIndex, 1);
+            
+            const originalPlacedWallObjects = placedWallObjects;
+            placedWallObjects = tempPlacedWallObjects;
+            
+            const hasCollision = checkWallCollision(gridPos.x, gridPos.y, wallName, itemType);
+            
+            placedWallObjects = originalPlacedWallObjects;
+            
+            // Position the preview object on the wall
+            let worldX, worldY, worldZ;
+            if (wallName === 'wall1') {
+                worldX = -3.92;
+                worldY = gridPos.y;
+                worldZ = gridPos.x;
+            } else if (wallName === 'wall2') {
+                worldX = gridPos.x;
+                worldY = gridPos.y;
+                worldZ = -3.92;
+            }
+            
+            movePreviewObject.position.set(worldX, worldY, worldZ);
+            
+            // Update wall highlight
+            updateWallHighlightSize(itemType);
+            if (hasCollision) {
+                wallHighlight.material.color.setHex(0xff0000); // Red for collision
+                movePreviewObject.userData.hasCollision = true;
+            } else {
+                wallHighlight.material.color.setHex(0x00ff00); // Green for valid placement
+                movePreviewObject.userData.hasCollision = false;
+            }
+            
+            // Position wall highlight
+            wallHighlight.position.set(worldX - 0.02, worldY, worldZ);
+            if (wallName === 'wall1') {
+                wallHighlight.rotation.set(0, Math.PI / 2, 0);
+            } else if (wallName === 'wall2') {
+                wallHighlight.rotation.set(0, 0, 0);
+            }
+            wallHighlight.visible = true;
+            
+            // Hide ground highlight for wall objects
+            if (groundHighlight) {
+                groundHighlight.visible = false;
+            }
+        } else {
+            wallHighlight.visible = false;
+        }
+        return;
+    }
+    
+    // Floor object movement logic (existing code)
     const floorIntersects = raycaster.intersectObjects(scene.children.filter(obj => 
         obj.name === 'floor' || (obj.geometry && obj.geometry.type === 'PlaneGeometry')
     ));
@@ -2094,6 +2529,26 @@ function confirmMove() {
     
     // Update the original object position
     originalObject.position.copy(movePreviewObject.position);
+    
+    // For wall objects, update grid coordinates in userData
+    if (originalObject.userData.isWallObject) {
+        const itemType = originalObject.userData.type;
+        const wallName = originalObject.userData.wallName;
+        
+        // Convert world position back to grid coordinates for storage
+        let wallX, wallY;
+        if (wallName === 'wall1') {
+            wallX = originalObject.position.z;
+            wallY = originalObject.position.y;
+        } else if (wallName === 'wall2') {
+            wallX = originalObject.position.x;
+            wallY = originalObject.position.y;
+        }
+        
+        const gridPos = snapToWallGrid(wallX, wallY, wallName, itemType);
+        originalObject.userData.gridX = gridPos.x;
+        originalObject.userData.gridY = gridPos.y;
+    }
     
     // Exit move mode
     exitMoveMode();
@@ -2219,6 +2674,9 @@ function resetCamera() {
     isWallView = false;
     currentWall = null; // Clear current wall
     
+    // Re-enable OrbitControls
+    controls.enabled = true;
+    
     // Hide all wall grids
     wallGrids.forEach(wallGrid => {
         wallGrid.grid.visible = false;
@@ -2236,12 +2694,5 @@ function resetCamera() {
     
    springBackCamera()
 }
-
-// Add keyboard event listener for ESC key
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-        resetCamera();
-    }
-});
 
 window.addEventListener('DOMContentLoaded', init); 
